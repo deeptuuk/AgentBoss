@@ -74,8 +74,9 @@ Submit an application for a job posting.
 2. Fetch job from storage by ID
 3. Create application event (kind:31970) with `d` tag
 4. Publish to relay (must succeed)
-5. Send NIP-04 DM to job publisher (must succeed — if fails, rollback event)
-6. Store application locally with status
+5. Send NIP-04 DM to job publisher
+   - If DM succeeds: done
+   - If DM fails: log warning, application is still valid (event is encrypted on relay)
 
 ### applications list
 
@@ -118,8 +119,9 @@ CLI: agentboss submit <job_id> --message "Hello"
   → build kind:31970 event with d="app_<job_id>_<timestamp>"
   → publish to relay (must succeed)
   → encrypt NIP-04 DM to job publisher pubkey
-  → send via NostrRelay.send_dm (must succeed or rollback event)
-  → store locally: applications table
+  → send via NostrRelay.send_dm
+  → store locally: applications table + set job_status.applied=True
+  (if DM fails: log warning, continue - event is encrypted on relay)
 ```
 
 ### Application Response
@@ -127,11 +129,13 @@ CLI: agentboss submit <job_id> --message "Hello"
 ```
 CLI: agentboss applications respond <app_id> --accept
   → main.py: load identity, verify publisher
+  → lookup applicant_pubkey from applications table using app_id
   → build kind:31971 event with d=<application_d_tag>, status=accepted
   → publish to relay (must succeed)
   → encrypt NIP-04 DM to applicant pubkey
-  → send via NostrRelay.send_dm (must succeed or rollback event)
+  → send via NostrRelay.send_dm
   → update local: application status
+  (if DM fails: log warning, continue - response event is encrypted on relay)
 ```
 
 ## Storage Schema
@@ -183,10 +187,12 @@ DM content format:
 |----------|----------|
 | Not logged in | Error: "Run agentboss login first" |
 | Job not found | Error: "Job not found" |
-| Already applied | Error: "You have already applied to this job" |
+| Already applied | Error: "You have already applied to this job" (any prior application regardless of status) |
 | Not job publisher (respond) | Error: "Only the job publisher can respond" |
-| DM send failure | Rollback: delete published event, error to user |
 | Event publish failure | Error: "Failed to submit application" |
+| DM send failure | Log warning, application still succeeds (event is encrypted on relay) |
+
+**Note:** Once published to a relay, events cannot be deleted. The DM failure warning is logged but the application event remains on relay (encrypted content only). The employer can still discover the application by querying the relay directly.
 
 ## Security Considerations
 
