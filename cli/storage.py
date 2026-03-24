@@ -32,6 +32,14 @@ class Storage:
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS job_status (
+                event_id TEXT PRIMARY KEY,
+                favorited INTEGER DEFAULT 0,
+                applied INTEGER DEFAULT 0,
+                created_at INTEGER DEFAULT (unixepoch('now')),
+                updated_at INTEGER DEFAULT (unixepoch('now'))
+            );
+            CREATE INDEX IF NOT EXISTS idx_job_status_event_id ON job_status(event_id);
         """)
         self._conn.commit()
 
@@ -150,4 +158,52 @@ class Storage:
             rows = self._conn.execute(
                 "SELECT * FROM regions ORDER BY code"
             ).fetchall()
+        return [dict(r) for r in rows]
+
+    # ── Job Status ──
+
+    def upsert_status(self, event_id: str, favorited: bool | None = None, applied: bool | None = None):
+        """Set or toggle status for a job. If status already exists, flips the value."""
+        existing = self.get_status(event_id)
+        current_fav = existing["favorited"] if existing else 0
+        current_app = existing["applied"] if existing else 0
+        # Toggle if favorited is True, keep current if favorited is False (explicit set)
+        new_fav = (1 - current_fav) if favorited is True else (0 if favorited is False else current_fav)
+        new_app = (1 - current_app) if applied is True else (0 if applied is False else current_app)
+        self._conn.execute(
+            """INSERT OR REPLACE INTO job_status (event_id, favorited, applied, updated_at)
+               VALUES (?, ?, ?, unixepoch('now'))""",
+            (event_id, new_fav, new_app),
+        )
+        self._conn.commit()
+
+    def get_status(self, event_id: str) -> dict | None:
+        row = self._conn.execute(
+            "SELECT * FROM job_status WHERE event_id = ?", (event_id,)
+        ).fetchone()
+        return dict(row) if row else None
+
+    def list_jobs(
+        self,
+        province_code: int | None = None,
+        city_code: int | None = None,
+        favorited: bool | None = None,
+        applied: bool | None = None,
+    ) -> list[dict]:
+        query = "SELECT jobs.* FROM jobs LEFT JOIN job_status ON jobs.event_id = job_status.event_id WHERE 1=1"
+        params: list = []
+        if province_code is not None:
+            query += " AND jobs.province_code = ?"
+            params.append(province_code)
+        if city_code is not None:
+            query += " AND jobs.city_code = ?"
+            params.append(city_code)
+        if favorited is not None:
+            query += " AND job_status.favorited = ?"
+            params.append(1 if favorited else 0)
+        if applied is not None:
+            query += " AND job_status.applied = ?"
+            params.append(1 if applied else 0)
+        query += " ORDER BY jobs.created_at DESC"
+        rows = self._conn.execute(query, params).fetchall()
         return [dict(r) for r in rows]

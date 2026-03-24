@@ -114,3 +114,65 @@ class TestRegions:
         assert db.get_config("region_version", "0") == "0"
         db.set_config("region_version", "3")
         assert db.get_config("region_version") == "3"
+
+
+class TestJobStatus:
+    def test_job_status_table_exists(self, db):
+        tables = db.list_tables()
+        assert "job_status" in tables
+
+    def test_upsert_status_favorited(self, db):
+        db.upsert_status("ev1", favorited=True)
+        status = db.get_status("ev1")
+        assert status is not None
+        assert status["favorited"] == 1
+        assert status["applied"] == 0
+
+    def test_get_status_returns_status(self, db):
+        db.upsert_status("ev1", favorited=True, applied=False)
+        status = db.get_status("ev1")
+        assert status["favorited"] == 1
+        assert status["applied"] == 0
+        assert status["event_id"] == "ev1"
+
+    def test_get_status_not_found(self, db):
+        assert db.get_status("nonexistent") is None
+
+    def test_toggle_favorited(self, db):
+        # First call: set favorited=1
+        db.upsert_status("ev1", favorited=True)
+        assert db.get_status("ev1")["favorited"] == 1
+        # Second call: toggle to 0
+        db.upsert_status("ev1", favorited=True)  # already True, toggles off
+        assert db.get_status("ev1")["favorited"] == 0
+
+    def test_toggle_applied(self, db):
+        db.upsert_status("ev1", applied=True)
+        assert db.get_status("ev1")["applied"] == 1
+        db.upsert_status("ev1", applied=True)  # toggle off
+        assert db.get_status("ev1")["applied"] == 0
+
+    def test_list_jobs_filter_favorited(self, db):
+        db.upsert_job("j1", "d1", "pub1", 1, 101, "{}", 1000)
+        db.upsert_job("j2", "d2", "pub2", 1, 101, "{}", 1000)
+        db.upsert_status("j1", favorited=True)
+        jobs = db.list_jobs(favorited=True)
+        assert len(jobs) == 1
+        assert jobs[0]["event_id"] == "j1"
+
+    def test_list_jobs_filter_applied(self, db):
+        db.upsert_job("j1", "d1", "pub1", 1, 101, "{}", 1000)
+        db.upsert_job("j2", "d2", "pub2", 2, 201, "{}", 1000)
+        db.upsert_status("j2", applied=True)
+        jobs = db.list_jobs(applied=True)
+        assert len(jobs) == 1
+        assert jobs[0]["event_id"] == "j2"
+
+    def test_list_jobs_filter_favorited_and_province(self, db):
+        db.upsert_job("j1", "d1", "pub1", 1, 101, "{}", 1000)
+        db.upsert_job("j2", "d2", "pub2", 2, 201, "{}", 1000)
+        db.upsert_status("j1", favorited=True)
+        db.upsert_status("j2", favorited=True)
+        jobs = db.list_jobs(province_code=1, favorited=True)
+        assert len(jobs) == 1
+        assert jobs[0]["event_id"] == "j1"
