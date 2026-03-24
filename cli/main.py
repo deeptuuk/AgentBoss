@@ -22,8 +22,10 @@ from cli.nostr_client import NostrRelay
 app = typer.Typer(help="AgentBoss: Decentralized Job Recruitment CLI")
 regions_app = typer.Typer(help="Region mapping management")
 config_app = typer.Typer(help="Configuration management")
+profile_app = typer.Typer(help="User profile management")
 app.add_typer(regions_app, name="regions")
 app.add_typer(config_app, name="config")
+app.add_typer(profile_app, name="profile")
 
 
 def _home() -> Path:
@@ -519,4 +521,178 @@ def config_show():
     max_jobs = storage.get_config("max-jobs", str(DEFAULT_MAX_JOBS))
     typer.echo(f"relay:    {relay}")
     typer.echo(f"max-jobs: {max_jobs}")
+    storage.close()
+
+
+# ── Profile ──
+
+PROFILE_CONTENT_VERSION = 1
+PROFILE_TAG = "profile"
+
+
+@profile_app.command(name="set")
+def profile_set(
+    name: str = typer.Option(..., "--name", help="Display name"),
+    bio: str = typer.Option("", "--bio", help="Short bio"),
+    avatar: str = typer.Option("", "--avatar", help="Avatar URL"),
+):
+    """Set your local profile."""
+    identity = _load_identity()
+    if not identity:
+        typer.echo("No identity. Run: agentboss login --key <nsec>")
+        raise typer.Exit(code=1)
+
+    content = json.dumps({
+        "name": name,
+        "bio": bio,
+        "avatar": avatar,
+        "version": PROFILE_CONTENT_VERSION,
+    }, ensure_ascii=False)
+
+    storage = _get_storage()
+    storage.upsert_profile(
+        pubkey=identity["pubkey"],
+        event_id="",
+        d_tag="",
+        content=content,
+        created_at=0,
+    )
+    typer.echo(f"Profile saved for {identity['npub']}")
+    storage.close()
+
+
+@profile_app.command(name="show")
+def profile_show(
+    pubkey: Optional[str] = typer.Option(None, "--pubkey", help="Show profile for pubkey"),
+):
+    """Show your profile or another user's profile."""
+    storage = _get_storage()
+
+    if pubkey:
+        # Show other user's profile
+        profile = storage.get_profile(pubkey)
+        if not profile:
+            typer.echo("Profile not found locally. Run: agentboss profile fetch <npub>")
+            storage.close()
+            raise typer.Exit(code=1)
+    else:
+        # Show own profile
+        identity = _load_identity()
+        if not identity:
+            typer.echo("No identity. Run: agentboss login --key <nsec>")
+            storage.close()
+            raise typer.Exit(code=1)
+        profile = storage.get_own_profile(identity["pubkey"])
+        if not profile:
+            typer.echo("No profile set. Run: agentboss profile set --name <name>")
+            storage.close()
+            raise typer.Exit(code=1)
+
+    try:
+        content = json.loads(profile["content"])
+        typer.echo(f"Name:   {content.get('name', 'N/A')}")
+        typer.echo(f"Bio:    {content.get('bio', 'N/A')}")
+        typer.echo(f"Avatar: {content.get('avatar', 'N/A')}")
+        typer.echo(f"Pubkey: {profile['pubkey']}")
+    except json.JSONDecodeError:
+        typer.echo("Error: Invalid profile content")
+    storage.close()
+
+
+@profile_app.command(name="publish")
+def profile_publish():
+    """Publish your profile to the Nostr relay."""
+    identity = _load_identity()
+    if not identity:
+        typer.echo("No identity. Run: agentboss login --key <nsec>")
+        raise typer.Exit(code=1)
+
+    storage = _get_storage()
+    profile = storage.get_own_profile(identity["pubkey"])
+    if not profile:
+        typer.echo("No profile set. Run: agentboss profile set --name <name>")
+        storage.close()
+        raise typer.Exit(code=1)
+
+    import uuid
+    d_tag = f"profile_{identity['pubkey']}"
+
+    event = build_event(
+        kind=KIND_APP_DATA,
+        content=profile["content"],
+        privkey=identity["privkey"],
+        pubkey=identity["pubkey"],
+        tags=[
+            ["d", d_tag],
+            ["t", APP_TAG],
+            ["t", PROFILE_TAG],
+        ],
+    )
+
+    relay_url = storage.get_config("relay", DEFAULT_RELAY)
+
+    async def _publish():
+        relay = NostrRelay(relay_url)
+        try:
+            await relay.connect()
+            result = await relay.publish_event(event)
+            if result["accepted"]:
+                # Save event_id to local profile
+                storage.upsert_profile(
+                    pubkey=identity["pubkey"],
+                    event_id=event["id"],
+                    d_tag=d_tag,
+                    content=profile["content"],
+                    created_at=event["created_at"],
+                )
+                typer.echo(f"Published: {event['id'][:16]}...")
+            else:
+                typer.echo(f"Rejected: {result['message']}")
+        finally:
+            await relay.close()
+
+    asyncio.run(_publish())
+    storage.close()
+
+
+@profile_app.command(name="fetch")
+def profile_fetch(
+    npub: str = typer.Argument(..., help="User npub to fetch profile for"),
+):
+    """Fetch a user's profile from the relay."""
+    from shared.crypto import to_hex
+    try:
+        pubkey = to_hex(npub)
+    except Exception:
+        typer.echo("Invalid npub format")
+        raise typer.Exit(code=1)
+
+    storage = _get_storage()
+    relay_url = storage.get_config("relay", DEFAULT_RELAY)
+
+    async def _fetch():
+        relay = NostrRelay(relay_url)
+        try:
+            await relay.connect()
+            await relay.subscribe(
+                "profile_fetch",
+                kinds=[KIND_APP_DATA],
+                authors=[pubkey],
+                tags={"#t": [APP_TAG, PROFILE_TAG]},
+                limit=1,
+            )
+            async for event in relay.receive_events("profile_fetch"):
+                storage.upsert_profile(
+                    pubkey=event["pubkey"],
+                    event_id=event["id"],
+                    d_tag=next((t[1] for t in event.get("tags", []) if t[0] == "d"), ""),
+                    content=event["content"],
+                    created_at=event["created_at"],
+                )
+                typer.echo(f"Profile fetched for {event['pubkey'][:16]}...")
+            await relay.unsubscribe("profile_fetch")
+        finally:
+            await relay.close()
+
+    asyncio.run(_fetch())
     storage.close()
