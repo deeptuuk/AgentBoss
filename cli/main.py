@@ -242,6 +242,8 @@ def fetch(
 def list_jobs(
     province: Optional[str] = typer.Option(None, "--province"),
     city: Optional[str] = typer.Option(None, "--city"),
+    favorited: bool = typer.Option(False, "--favorited", is_flag=True, help="Show only favorited jobs"),
+    applied: bool = typer.Option(False, "--applied", is_flag=True, help="Show only applied jobs"),
 ):
     """List locally stored job postings."""
     storage = _get_storage()
@@ -254,7 +256,12 @@ def list_jobs(
     if city:
         city_code_val = resolver.city_code(city)
 
-    jobs = storage.list_jobs(province_code=prov_code, city_code=city_code_val)
+    jobs = storage.list_jobs(
+        province_code=prov_code,
+        city_code=city_code_val,
+        favorited=favorited or None,
+        applied=applied or None,
+    )
     if not jobs:
         typer.echo("No jobs found.")
         storage.close()
@@ -265,9 +272,87 @@ def list_jobs(
             content = parse_job_content(job["content"])
             pname = resolver.province_name(job["province_code"]) or str(job["province_code"])
             cname = resolver.city_name(job["city_code"]) or str(job["city_code"])
-            typer.echo(f"[{job['event_id'][:12]}] {content.title} @ {content.company} | {pname}/{cname} | {content.salary_range}")
+            # Show status indicators
+            status = storage.get_status(job["event_id"])
+            indicators = ""
+            if status:
+                indicators += " ⭐" if status["favorited"] else ""
+                indicators += " ✅" if status["applied"] else ""
+            typer.echo(f"[{job['event_id'][:12]}] {content.title} @ {content.company} | {pname}/{cname} | {content.salary_range}{indicators}")
         except Exception:
             typer.echo(f"[{job['event_id'][:12]}] (parse error)")
+    storage.close()
+
+
+# ── Job Status ──
+
+@app.command()
+def favorite(job_id: str = typer.Argument(..., help="Job ID (full or prefix)")):
+    """Toggle favorited status of a job."""
+    storage = _get_storage()
+    job = storage.get_job(job_id)
+    if not job:
+        # Try prefix match
+        jobs = storage.list_jobs()
+        matches = [j for j in jobs if j["event_id"].startswith(job_id)]
+        if len(matches) == 1:
+            job = matches[0]
+        elif len(matches) > 1:
+            typer.echo("Multiple jobs match prefix. Use full ID.")
+            raise typer.Exit(code=1)
+        else:
+            typer.echo("Job not found in local storage. Run `fetch` first.")
+            raise typer.Exit(code=1)
+    storage.upsert_status(job["event_id"], favorited=True)
+    status = storage.get_status(job["event_id"])
+    new_state = "⭐ favorited" if status["favorited"] else "unfavorited"
+    typer.echo(f"Job {job['event_id'][:12]}... - {new_state}")
+    storage.close()
+
+
+@app.command()
+def apply(job_id: str = typer.Argument(..., help="Job ID (full or prefix)")):
+    """Toggle applied status of a job."""
+    storage = _get_storage()
+    job = storage.get_job(job_id)
+    if not job:
+        jobs = storage.list_jobs()
+        matches = [j for j in jobs if j["event_id"].startswith(job_id)]
+        if len(matches) == 1:
+            job = matches[0]
+        elif len(matches) > 1:
+            typer.echo("Multiple jobs match prefix. Use full ID.")
+            raise typer.Exit(code=1)
+        else:
+            typer.echo("Job not found in local storage. Run `fetch` first.")
+            raise typer.Exit(code=1)
+    storage.upsert_status(job["event_id"], applied=True)
+    status = storage.get_status(job["event_id"])
+    new_state = "✅ marked as applied" if status["applied"] else "unmarked"
+    typer.echo(f"Job {job['event_id'][:12]}... - {new_state}")
+    storage.close()
+
+
+@app.command()
+def status(job_id: str = typer.Argument(..., help="Job ID (full or prefix)")):
+    """Show favorited/applied status of a job."""
+    storage = _get_storage()
+    job = storage.get_job(job_id)
+    if not job:
+        jobs = storage.list_jobs()
+        matches = [j for j in jobs if j["event_id"].startswith(job_id)]
+        if len(matches) == 1:
+            job = matches[0]
+        elif len(matches) > 1:
+            typer.echo("Multiple jobs match prefix. Use full ID.")
+            raise typer.Exit(code=1)
+        else:
+            typer.echo("Job not found.")
+            raise typer.Exit(code=1)
+    st = storage.get_status(job["event_id"])
+    fav = "⭐ favorited" if (st and st["favorited"]) else "☆ not favorited"
+    app = "✅ applied" if (st and st["applied"]) else "○ not applied"
+    typer.echo(f"Job {job['event_id'][:12]}... | {fav} | {app}")
     storage.close()
 
 
