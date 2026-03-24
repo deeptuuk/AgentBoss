@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<h1>Welcome, {{ user.username }}</h1>
+<p>npub: {{ user.npub }}</p>
+<p>Registered: {{ user.created_at }}</p>
+<button id="show-key">Show Private Key</button>
+<pre id="key-display"></pre>
+<h2>CLI Setup</h2>
+<pre>agentboss login --key &lt;your nsec from above&gt;
+agentboss regions sync
+agentboss fetch --province 北京</pre>
+<script>
+document.getElementById('show-key').onclick = async () => {
+    const resp = await fetch('/api/key');
+    const data = await resp.json();
+    document.getElementById('key-display').innerText = `nsec: ${data.nsec}\nnpub: ${data.npub}`;
+};
+</script>
+{% endblock %}

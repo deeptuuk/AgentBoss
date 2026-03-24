@@ -1,0 +1,91 @@
+import json
+import pytest
+from cli.nostr_client import (
+    build_req_filter,
+    build_event_message,
+    build_close_message,
+    parse_relay_message,
+)
+from shared.crypto import gen_keys
+from shared.event import build_event
+
+
+class TestMessageBuilders:
+    def test_build_req_filter_basic(self):
+        req = build_req_filter(
+            sub_id="sub1",
+            kinds=[30078],
+            tags={"#t": ["agentboss", "job"]},
+        )
+        parsed = json.loads(req)
+        assert parsed[0] == "REQ"
+        assert parsed[1] == "sub1"
+        assert parsed[2]["kinds"] == [30078]
+        assert parsed[2]["#t"] == ["agentboss", "job"]
+
+    def test_build_req_filter_with_province(self):
+        req = build_req_filter(
+            sub_id="sub2",
+            kinds=[30078],
+            tags={"#t": ["agentboss", "job"], "#province": ["1"]},
+        )
+        parsed = json.loads(req)
+        assert parsed[2]["#province"] == ["1"]
+
+    def test_build_req_filter_with_limit(self):
+        req = build_req_filter(sub_id="s", kinds=[30078], limit=50)
+        parsed = json.loads(req)
+        assert parsed[2]["limit"] == 50
+
+    def test_build_event_message(self):
+        priv, pub = gen_keys()
+        ev = build_event(kind=1, content="hello", privkey=priv, pubkey=pub)
+        msg = build_event_message(ev)
+        parsed = json.loads(msg)
+        assert parsed[0] == "EVENT"
+        assert parsed[1]["id"] == ev["id"]
+
+    def test_build_close_message(self):
+        msg = build_close_message("sub1")
+        parsed = json.loads(msg)
+        assert parsed == ["CLOSE", "sub1"]
+
+
+class TestParseRelayMessage:
+    def test_parse_event_message(self):
+        raw = json.dumps(["EVENT", "sub1", {"id": "abc", "kind": 30078}])
+        msg_type, data = parse_relay_message(raw)
+        assert msg_type == "EVENT"
+        assert data["sub_id"] == "sub1"
+        assert data["event"]["id"] == "abc"
+
+    def test_parse_eose_message(self):
+        raw = json.dumps(["EOSE", "sub1"])
+        msg_type, data = parse_relay_message(raw)
+        assert msg_type == "EOSE"
+        assert data["sub_id"] == "sub1"
+
+    def test_parse_ok_accepted(self):
+        raw = json.dumps(["OK", "eventid1", True, ""])
+        msg_type, data = parse_relay_message(raw)
+        assert msg_type == "OK"
+        assert data["event_id"] == "eventid1"
+        assert data["accepted"] is True
+
+    def test_parse_ok_rejected(self):
+        raw = json.dumps(["OK", "eventid1", False, "blocked: not on whitelist"])
+        msg_type, data = parse_relay_message(raw)
+        assert msg_type == "OK"
+        assert data["accepted"] is False
+        assert "whitelist" in data["message"]
+
+    def test_parse_notice(self):
+        raw = json.dumps(["NOTICE", "some error"])
+        msg_type, data = parse_relay_message(raw)
+        assert msg_type == "NOTICE"
+        assert data["message"] == "some error"
+
+    def test_parse_unknown(self):
+        raw = json.dumps(["UNKNOWN", "data"])
+        msg_type, data = parse_relay_message(raw)
+        assert msg_type == "UNKNOWN"
