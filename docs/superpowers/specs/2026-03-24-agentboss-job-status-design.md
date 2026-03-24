@@ -81,9 +81,11 @@ agentboss list --favorited --applied  # AND: both true
 ### Storage API (cli/storage.py additions)
 
 ```python
-def upsert_status(self, event_id: str, favorited: bool | None = None, applied: bool | None = None)
-def get_status(self, event_id: str) -> dict | None
-def list_status(self, favorited: bool | None = None, applied: bool | None = None) -> list[dict]
+from typing import Optional
+
+def upsert_status(self, event_id: str, favorited: Optional[bool] = None, applied: Optional[bool] = None)
+def get_status(self, event_id: str) -> Optional[dict]
+def list_status(self, favorited: Optional[bool] = None, applied: Optional[bool] = None) -> list[dict]
 ```
 
 ## Test Cases
@@ -96,6 +98,8 @@ def list_status(self, favorited: bool | None = None, applied: bool | None = None
 6. `test_list_favorited_and_province` — AND filter works
 7. `test_status_not_found` — error on missing job
 8. `test_status_shows_both` — returns favorited+applied status
+9. `test_favorite_ambiguous_prefix` — error when prefix matches multiple jobs
+10. `test_apply_job_not_in_local_db` — error "Job not found in local storage"
 
 ## TDD Order
 
