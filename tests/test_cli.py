@@ -62,3 +62,32 @@ class TestListJobs:
         result = runner.invoke(app, ["list"])
         assert result.exit_code == 0
         assert "No jobs" in result.stdout or result.stdout.strip() == ""
+
+
+class TestProfile:
+    def test_profile_show_no_identity(self, cli_home):
+        """Show profile without identity should fail."""
+        result = runner.invoke(app, ["profile", "show"])
+        assert "No identity" in result.stdout or result.exit_code != 0
+
+    def test_profile_set_saves_profile(self, cli_home):
+        """Profile set saves profile locally."""
+        runner.invoke(app, ["login", "--key", "aa" * 32])
+        result = runner.invoke(app, ["profile", "set", "--name", "Alice", "--bio", "Dev"])
+        assert result.exit_code == 0
+        assert "Profile saved" in result.stdout
+
+    def test_profile_show_local(self, cli_home):
+        """Show profile after setting."""
+        runner.invoke(app, ["login", "--key", "aa" * 32])
+        runner.invoke(app, ["profile", "set", "--name", "Alice", "--bio", "Developer"])
+        result = runner.invoke(app, ["profile", "show"])
+        assert result.exit_code == 0
+        assert "Alice" in result.stdout
+        assert "Developer" in result.stdout
+
+    def test_profile_show_no_profile(self, cli_home):
+        """Show profile when none set."""
+        runner.invoke(app, ["login", "--key", "aa" * 32])
+        result = runner.invoke(app, ["profile", "show"])
+        assert "No profile set" in result.stdout or result.exit_code != 0
