@@ -1,0 +1,8 @@
+APP_TAG = "agentboss"
+JOB_TAG = "job"
+REGION_TAG = "region"
+KIND_APP_DATA = 30078
+REGION_MAP_D_TAG = "region_map_v1"
+DEFAULT_RELAY = "ws://localhost:7777"
+DEFAULT_MAX_JOBS = 100
+JOB_CONTENT_VERSION = 1
