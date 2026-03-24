@@ -6,7 +6,7 @@ import time
 
 class UserDB:
     def __init__(self, db_path: str):
-        self._conn = sqlite3.connect(db_path)
+        self._conn = sqlite3.connect(db_path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
 
     def init_db(self):
