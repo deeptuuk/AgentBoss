@@ -2071,7 +2071,7 @@ import json
 import os
 import sys
 
-WHITELIST_PATH = "/etc/agentboss/whitelist.txt"
+WHITELIST_PATH = os.environ.get("AGENTBOSS_WHITELIST", "/etc/agentboss/whitelist.txt")
 PROTECTED_KIND = 30078
 
 
@@ -2195,8 +2195,8 @@ echo "  strfry --config=/etc/strfry.conf relay"
 
 - [ ] **Step 3: Smoke test write_policy.py**
 
-Run: `python relay/write_policy.py < /dev/null`
-Expected: exits without error (accepts any input gracefully; real testing via tests/test_write_policy.py)
+Run: `python -c "import sys; sys.path.insert(0, 'relay'); import write_policy; print('OK')"`
+Expected: prints "OK" with no traceback (module imports successfully)
 
 - [ ] **Step 4: Commit**
 
