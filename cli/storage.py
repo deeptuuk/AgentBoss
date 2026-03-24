@@ -1,5 +1,6 @@
 """SQLite local storage for jobs, regions, and config."""
 
+import json
 import sqlite3
 import time
 
@@ -40,6 +41,14 @@ class Storage:
                 updated_at INTEGER DEFAULT (unixepoch('now'))
             );
             CREATE INDEX IF NOT EXISTS idx_job_status_event_id ON job_status(event_id);
+            CREATE TABLE IF NOT EXISTS profiles (
+                pubkey TEXT PRIMARY KEY,
+                event_id TEXT UNIQUE,
+                d_tag TEXT UNIQUE,
+                content TEXT NOT NULL,
+                created_at INTEGER NOT NULL,
+                received_at INTEGER NOT NULL DEFAULT 0
+            );
         """)
         self._conn.commit()
 
@@ -241,3 +250,47 @@ class Storage:
         query += " ORDER BY jobs.created_at DESC"
         rows = self._conn.execute(query, params).fetchall()
         return [dict(r) for r in rows]
+
+    # ── Profiles ──
+
+    def upsert_profile(
+        self,
+        pubkey: str,
+        event_id: str,
+        d_tag: str,
+        content: str,
+        created_at: int,
+    ):
+        """Store or update a user profile."""
+        self._conn.execute(
+            """INSERT OR REPLACE INTO profiles
+               (pubkey, event_id, d_tag, content, created_at, received_at)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (pubkey, event_id, d_tag, content, created_at, int(time.time())),
+        )
+        self._conn.commit()
+
+    def get_profile(self, pubkey: str) -> dict | None:
+        """Get profile by pubkey."""
+        row = self._conn.execute(
+            "SELECT * FROM profiles WHERE pubkey = ?", (pubkey,)
+        ).fetchone()
+        if not row:
+            return None
+        profile = dict(row)
+        # Parse JSON content to extract name for convenience
+        try:
+            content = json.loads(profile.get("content", "{}"))
+            profile["name"] = content.get("name", "")
+        except (json.JSONDecodeError, TypeError):
+            profile["name"] = ""
+        return profile
+
+    def get_own_profile(self, pubkey: str) -> dict | None:
+        """Alias for get_profile."""
+        return self.get_profile(pubkey)
+
+    def delete_profile(self, pubkey: str):
+        """Delete profile by pubkey."""
+        self._conn.execute("DELETE FROM profiles WHERE pubkey = ?", (pubkey,))
+        self._conn.commit()

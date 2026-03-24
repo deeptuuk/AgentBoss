@@ -279,3 +279,77 @@ class TestJobStatus:
         jobs = db.list_jobs(province_code=1, favorited=True)
         assert len(jobs) == 1
         assert jobs[0]["event_id"] == "j1"
+
+
+class TestProfiles:
+    """Tests for user profiles storage."""
+
+    def test_profiles_table_exists(self, db):
+        """Profile table exists in database."""
+        tables = db.list_tables()
+        assert "profiles" in tables
+
+    def test_upsert_profile(self, db):
+        """Can store a user profile."""
+        db.upsert_profile(
+            pubkey="aa" * 32,
+            event_id="ev1",
+            d_tag="profile_1",
+            content='{"name":"Alice","bio":"Developer"}',
+            created_at=1000,
+        )
+        profile = db.get_profile("aa" * 32)
+        assert profile is not None
+        assert profile["pubkey"] == "aa" * 32
+        assert profile["name"] == "Alice"
+
+    def test_upsert_replaces_profile(self, db):
+        """Upsert replaces existing profile with same pubkey."""
+        db.upsert_profile(
+            pubkey="aa" * 32,
+            event_id="ev1",
+            d_tag="profile_1",
+            content='{"name":"Alice"}',
+            created_at=1000,
+        )
+        db.upsert_profile(
+            pubkey="aa" * 32,
+            event_id="ev2",
+            d_tag="profile_1",
+            content='{"name":"Bob"}',
+            created_at=2000,
+        )
+        profile = db.get_profile("aa" * 32)
+        assert profile["name"] == "Bob"
+        assert profile["event_id"] == "ev2"
+
+    def test_get_profile_not_found(self, db):
+        """Returns None for non-existent profile."""
+        profile = db.get_profile("nonexistent")
+        assert profile is None
+
+    def test_get_own_profile(self, db):
+        """Can retrieve own profile by pubkey."""
+        db.upsert_profile(
+            pubkey="aa" * 32,
+            event_id="ev1",
+            d_tag="profile_1",
+            content='{"name":"Alice","bio":"Dev"}',
+            created_at=1000,
+        )
+        own = db.get_own_profile("aa" * 32)
+        assert own is not None
+        assert own["name"] == "Alice"
+
+    def test_delete_profile(self, db):
+        """Can delete a profile."""
+        db.upsert_profile(
+            pubkey="aa" * 32,
+            event_id="ev1",
+            d_tag="profile_1",
+            content='{"name":"Alice"}',
+            created_at=1000,
+        )
+        db.delete_profile("aa" * 32)
+        profile = db.get_profile("aa" * 32)
+        assert profile is None
