@@ -116,6 +116,109 @@ class TestRegions:
         assert db.get_config("region_version") == "3"
 
 
+class TestJobSearch:
+    def test_search_single_keyword_title(self, db):
+        """Search finds job by keyword in title"""
+        db.upsert_job("j1", "d1", "pub1", 1, 101, '{"title":"React Developer","company":"TechCo","description":"Frontend work"}', 1000)
+        db.upsert_job("j2", "d2", "pub1", 1, 101, '{"title":"Python Backend","company":"DataCorp","description":"API development"}', 1000)
+        jobs = db.search_jobs("React")
+        assert len(jobs) == 1
+        assert jobs[0]["event_id"] == "j1"
+
+    def test_search_single_keyword_company(self, db):
+        """Search finds job by keyword in company"""
+        db.upsert_job("j1", "d1", "pub1", 1, 101, '{"title":"Dev","company":"Google","description":"Work here"}', 1000)
+        db.upsert_job("j2", "d2", "pub1", 1, 101, '{"title":"Dev","company":"Meta","description":"Work here"}', 1000)
+        jobs = db.search_jobs("Google")
+        assert len(jobs) == 1
+        assert jobs[0]["event_id"] == "j1"
+
+    def test_search_single_keyword_description(self, db):
+        """Search finds job by keyword in description"""
+        db.upsert_job("j1", "d1", "pub1", 1, 101, '{"title":"Dev","company":"Co","description":"Remote work available"}', 1000)
+        db.upsert_job("j2", "d2", "pub1", 1, 101, '{"title":"Dev","company":"Co","description":"Onsite only"}', 1000)
+        jobs = db.search_jobs("Remote")
+        assert len(jobs) == 1
+        assert jobs[0]["event_id"] == "j1"
+
+    def test_search_multiple_keywords_and(self, db):
+        """Multiple keywords must all match (AND logic)"""
+        db.upsert_job("j1", "d1", "pub1", 1, 101, '{"title":"React Developer","company":"TechCo","description":"Frontend"}', 1000)
+        db.upsert_job("j2", "d2", "pub1", 1, 101, '{"title":"React Developer","company":"BigCorp","description":"Backend"}', 1000)
+        db.upsert_job("j3", "d3", "pub1", 1, 101, '{"title":"Python Dev","company":"TechCo","description":"Fullstack"}', 1000)
+        # Both "React" AND "Frontend" must match
+        jobs = db.search_jobs("React Frontend")
+        assert len(jobs) == 1
+        assert jobs[0]["event_id"] == "j1"
+
+    def test_search_case_insensitive(self, db):
+        """Search is case-insensitive"""
+        db.upsert_job("j1", "d1", "pub1", 1, 101, '{"title":"React Developer","company":"TechCo","description":""}', 1000)
+        jobs_lower = db.search_jobs("react")
+        jobs_upper = db.search_jobs("REACT")
+        jobs_mixed = db.search_jobs("ReAcT")
+        assert len(jobs_lower) == 1
+        assert len(jobs_upper) == 1
+        assert len(jobs_mixed) == 1
+        assert jobs_lower[0]["event_id"] == "j1"
+
+    def test_search_no_match(self, db):
+        """Search returns empty when no job matches"""
+        db.upsert_job("j1", "d1", "pub1", 1, 101, '{"title":"React Developer","company":"TechCo","description":""}', 1000)
+        jobs = db.search_jobs("Python")
+        assert len(jobs) == 0
+
+    def test_search_empty_query(self, db):
+        """Search with empty query returns all jobs"""
+        db.upsert_job("j1", "d1", "pub1", 1, 101, '{"title":"Dev1","company":"C","description":""}', 1000)
+        db.upsert_job("j2", "d2", "pub1", 1, 101, '{"title":"Dev2","company":"C","description":""}', 1000)
+        jobs = db.search_jobs("")
+        assert len(jobs) == 2
+
+    def test_search_combined_with_filters(self, db):
+        """Search can be combined with province/city filters"""
+        db.upsert_job("j1", "d1", "pub1", 1, 101, '{"title":"React Dev","company":"Co","description":""}', 1000)
+        db.upsert_job("j2", "d2", "pub1", 2, 201, '{"title":"React Dev","company":"Co","description":""}', 1000)
+        # Search for React, filtered by province 1
+        jobs = db.list_jobs(search_query="React", province_code=1)
+        assert len(jobs) == 1
+        assert jobs[0]["event_id"] == "j1"
+
+    def test_search_returns_relevant_jobs_only(self, db):
+        """Search only searches in title, company, description of job content"""
+        db.upsert_job("j1", "d1", "pub1", 1, 101, '{"title":"Dev","company":"Acme","description":"Keywords: golang rust"}', 1000)
+        # "golang" is in description, "python" is not - should not match both (AND logic)
+        jobs = db.search_jobs("golang python")
+        assert len(jobs) == 0
+
+    def test_list_jobs_with_search_query(self, db):
+        """list_jobs accepts search_query parameter"""
+        db.upsert_job("j1", "d1", "pub1", 1, 101, '{"title":"Senior React Dev","company":"BigTech","description":"Build UI"}', 1000)
+        db.upsert_job("j2", "d2", "pub1", 1, 101, '{"title":"Python Backend","company":"DataCo","description":"API work"}', 1000)
+        jobs = db.list_jobs(search_query="React")
+        assert len(jobs) == 1
+        assert jobs[0]["event_id"] == "j1"
+
+    def test_search_word_boundary_uses_json_extract(self, db):
+        """Search uses json_extract to match specific JSON fields, not raw JSON substring"""
+        db.upsert_job("j1", "d1", "pub1", 1, 101, '{"title":"React Developer","company":"TechCo","description":"Frontend work"}', 1000)
+        db.upsert_job("j2", "d2", "pub1", 1, 101, '{"title":"Python Dev","company":"Contact Co","description":"Customer support"}', 1000)
+        # "Contact" appears in j2's company field
+        # json_extract ensures we match the actual field values
+        jobs = db.search_jobs("Contact")
+        assert len(jobs) == 1
+        assert jobs[0]["event_id"] == "j2"
+
+    def test_search_special_chars_escaped(self, db):
+        """Search correctly handles LIKE special characters (%)"""
+        db.upsert_job("j1", "d1", "pub1", 1, 101, '{"title":"100% Remote","company":"Co","description":"Work from anywhere"}', 1000)
+        db.upsert_job("j2", "d2", "pub1", 1, 101, '{"title":"Onsite Only","company":"Co","description":"No remote"}', 1000)
+        # "100%" should match the job with "100% Remote" in title
+        jobs = db.search_jobs("100%")
+        assert len(jobs) == 1
+        assert jobs[0]["event_id"] == "j1"
+
+
 class TestJobStatus:
     def test_job_status_table_exists(self, db):
         tables = db.list_tables()

@@ -244,6 +244,7 @@ def list_jobs(
     city: Optional[str] = typer.Option(None, "--city"),
     favorited: bool = typer.Option(False, "--favorited", is_flag=True, help="Show only favorited jobs"),
     applied: bool = typer.Option(False, "--applied", is_flag=True, help="Show only applied jobs"),
+    search: Optional[str] = typer.Option(None, "--search", help="Search keywords (space-separated, AND match)"),
 ):
     """List locally stored job postings."""
     storage = _get_storage()
@@ -261,6 +262,7 @@ def list_jobs(
         city_code=city_code_val,
         favorited=favorited or None,
         applied=applied or None,
+        search_query=search,
     )
     if not jobs:
         typer.echo("No jobs found.")
