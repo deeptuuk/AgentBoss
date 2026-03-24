@@ -43,7 +43,7 @@ On job publish: publish to ALL federation relays simultaneously
 
 | Decision | Choice | Rationale |
 |----------|--------|----------|
-| Sync strategy | Federation subscription (C) | Relay list as federation ID,符合 Nostr 去中心化 |
+| Sync strategy | Federation subscription (C) | Relay list as federation ID, aligns with Nostr decentralization |
 | Cache strategy | Hybrid (C) | Balance speed vs storage |
 | Membership | Invite codes (B) | Shareable, user-friendly |
 | Sync protocol | NIP-40 style (A) | Client-side aggregation, no relay changes needed |
@@ -134,9 +134,9 @@ Leave and delete a federation.
 
 ## Open Questions
 
-1. What kind number to use for federation metadata? (propose 31990)
-2. Should federations have a time-to-live (TTL) requiring re-sync?
-3. How to handle conflicting edits to same job across relays?
+1. **Kind number**: Propose 31990 for federation metadata events. Lock down before implementation.
+2. **Federation TTL**: Should federations require periodic re-sync? (Not required initially — clients re-fetch relay list on federation connect.)
+3. **Conflicting job edits**: When the same job (same d_tag) is published to different relays with different content, use **last-write-wins** based on event `created_at` timestamp. The most recent event (by timestamp) wins. Ties broken by event_id lexically (deterministic).
 
 ## Implementation Priority
 
