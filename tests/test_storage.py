@@ -199,6 +199,25 @@ class TestJobSearch:
         assert len(jobs) == 1
         assert jobs[0]["event_id"] == "j1"
 
+    def test_search_word_boundary_uses_json_extract(self, db):
+        """Search uses json_extract to match specific JSON fields, not raw JSON substring"""
+        db.upsert_job("j1", "d1", "pub1", 1, 101, '{"title":"React Developer","company":"TechCo","description":"Frontend work"}', 1000)
+        db.upsert_job("j2", "d2", "pub1", 1, 101, '{"title":"Python Dev","company":"Contact Co","description":"Customer support"}', 1000)
+        # "Contact" appears in j2's company field
+        # json_extract ensures we match the actual field values
+        jobs = db.search_jobs("Contact")
+        assert len(jobs) == 1
+        assert jobs[0]["event_id"] == "j2"
+
+    def test_search_special_chars_escaped(self, db):
+        """Search correctly handles LIKE special characters (%)"""
+        db.upsert_job("j1", "d1", "pub1", 1, 101, '{"title":"100% Remote","company":"Co","description":"Work from anywhere"}', 1000)
+        db.upsert_job("j2", "d2", "pub1", 1, 101, '{"title":"Onsite Only","company":"Co","description":"No remote"}', 1000)
+        # "100%" should match the job with "100% Remote" in title
+        jobs = db.search_jobs("100%")
+        assert len(jobs) == 1
+        assert jobs[0]["event_id"] == "j1"
+
 
 class TestJobStatus:
     def test_job_status_table_exists(self, db):

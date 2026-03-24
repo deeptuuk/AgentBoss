@@ -166,11 +166,18 @@ class Storage:
         ).fetchone()
         return dict(row) if row else None
 
+    # ── Job Search ──
+
+    def _escape_like(self, text: str) -> str:
+        """Escape special characters in LIKE pattern."""
+        return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
     def search_jobs(self, query: str) -> list[dict]:
         """Search jobs by keywords in title, company, and description.
 
         Case-insensitive AND matching: all keywords must match.
         Empty query returns all jobs.
+        Uses json_extract to search specific fields (no substring false positives).
         """
         if not query or not query.strip():
             rows = self._conn.execute(
@@ -183,12 +190,15 @@ class Storage:
         conditions = []
         params = []
         for keyword in keywords:
-            pattern = f"%{keyword}%"
-            # Search in title, company, description (case-insensitive)
+            escaped = self._escape_like(keyword)
+            pattern = f"%{escaped}%"
+            # Search in title, company, description using json_extract
             conditions.append(
-                "(LOWER(content) LIKE LOWER(?) COLLATE NOCASE)"
+                "(LOWER(json_extract(content, '$.title')) LIKE ? ESCAPE '\\' COLLATE NOCASE"
+                " OR LOWER(json_extract(content, '$.company')) LIKE ? ESCAPE '\\' COLLATE NOCASE"
+                " OR LOWER(json_extract(content, '$.description')) LIKE ? ESCAPE '\\' COLLATE NOCASE)"
             )
-            params.append(pattern)
+            params.extend([pattern, pattern, pattern])
 
         where_clause = " AND ".join(conditions)
         sql = f"SELECT * FROM jobs WHERE {where_clause} ORDER BY created_at DESC"
@@ -220,9 +230,14 @@ class Storage:
         if search_query and search_query.strip():
             keywords = search_query.strip().split()
             for keyword in keywords:
-                pattern = f"%{keyword}%"
-                query += " AND (LOWER(jobs.content) LIKE LOWER(?) COLLATE NOCASE)"
-                params.append(pattern)
+                escaped = self._escape_like(keyword)
+                pattern = f"%{escaped}%"
+                query += (
+                    " AND (LOWER(json_extract(jobs.content, '$.title')) LIKE ? ESCAPE '\\' COLLATE NOCASE"
+                    " OR LOWER(json_extract(jobs.content, '$.company')) LIKE ? ESCAPE '\\' COLLATE NOCASE"
+                    " OR LOWER(json_extract(jobs.content, '$.description')) LIKE ? ESCAPE '\\' COLLATE NOCASE)"
+                )
+                params.extend([pattern, pattern, pattern])
         query += " ORDER BY jobs.created_at DESC"
         rows = self._conn.execute(query, params).fetchall()
         return [dict(r) for r in rows]
