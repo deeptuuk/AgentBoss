@@ -225,7 +225,7 @@ CREATE TABLE config (
 | Method | Path | Function |
 |--------|------|----------|
 | POST | `/api/register` | Create user + generate Nostr keypair + add npub to whitelist |
-| POST | `/api/login` | Verify password, return session |
+| POST | `/api/login` | Verify password, return session (cookie-based session with signed token) |
 | GET | `/api/me` | Current user info (npub, registration time, status) |
 | GET | `/api/key` | Retrieve nsec (only accessible after login) |
 
@@ -251,8 +251,8 @@ User submits form → Backend validates
   → Generate Nostr keypair (shared/crypto.py)
   → bcrypt hash password, store in DB
   → Encrypt nsec, store in DB
-  → Append npub hex to /etc/agentboss/whitelist.txt
-  → Display nsec on page (prompt user to save, shown once)
+  → Append hex pubkey to /etc/agentboss/whitelist.txt
+  → Display nsec on page (also retrievable later via /api/key after login)
 ```
 
 ## strfry Relay Customization
@@ -265,7 +265,7 @@ stdout: {"id":"...","action":"accept"} or {"id":"...","action":"reject","msg":"U
 ```
 
 **Logic:**
-1. Load `/etc/agentboss/whitelist.txt` (npub hex list) into memory
+1. Load `/etc/agentboss/whitelist.txt` (hex pubkey list, one per line) into memory
 2. Extract event `pubkey`
 3. If pubkey in whitelist → accept
 4. If pubkey not in whitelist → reject
