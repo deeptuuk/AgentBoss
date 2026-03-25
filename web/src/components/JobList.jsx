@@ -1,7 +1,7 @@
 import { JobCard } from './JobCard.jsx';
 import { t } from '../lib/i18n.js';
 
-export function JobList({ jobs, loading, error, onJobClick, onRetry, onPublish }) {
+export function JobList({ jobs, loading, error, onJobClick, onRetry, onPublish, onDelete }) {
   if (loading) {
     return (
       <div class="jobs-grid">
@@ -45,7 +45,7 @@ export function JobList({ jobs, loading, error, onJobClick, onRetry, onPublish }
   return (
     <div class="jobs-grid">
       {jobs.map((job) => (
-        <JobCard key={job.id} job={job} onClick={onJobClick} />
+        <JobCard key={job.id} job={job} onClick={onJobClick} onDelete={onDelete} />
       ))}
     </div>
   );

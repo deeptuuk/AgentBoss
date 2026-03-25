@@ -2,18 +2,24 @@ import { useState, useEffect } from 'preact/hooks';
 import { Navbar } from './components/Navbar.jsx';
 import { JobList } from './components/JobList.jsx';
 import { PublishForm } from './components/PublishForm.jsx';
+import { DeleteModal } from './components/DeleteModal.jsx';
 import { useJobs } from './hooks/useJobs.js';
 import { useFavorites } from './hooks/useFavorites.js';
-import { hasSigner } from './lib/nostr.js';
+import { useDeletedJobs } from './hooks/useDeletedJobs.js';
+import { hasSigner, deleteJob } from './lib/nostr.js';
+import { useAuth } from './hooks/useAuth.js';
 import { t, getLang, subscribeToLang } from './lib/i18n.js';
 
 export function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showPublish, setShowPublish] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
   // Force re-render when language changes via subscribeToLang
   const [_langVersion, setLangVersion] = useState(0);
   const { jobs, loading, error, reload } = useJobs({ searchQuery });
   const { count: favCount } = useFavorites();
+  const { pubkey } = useAuth();
+  const { markDeleted } = useDeletedJobs();
 
   // Subscribe to language changes — triggers re-render on switch
   useEffect(() => {
@@ -41,6 +47,16 @@ export function App() {
       setShowPublish(false);
       toast.remove();
     }, 2500);
+  };
+
+  const handleDeleteConfirm = async (job) => {
+    try {
+      await deleteJob(job.d_tag, pubkey);
+    } catch {
+      // deletion failed silently
+    }
+    markDeleted(job.d_tag);
+    setDeleteTarget(null);
   };
 
   return (
@@ -80,7 +96,7 @@ export function App() {
                   {loading ? t('loading_jobs') : `${jobs.length} ${t('jobs_count')}`}
                 </span>
               </div>
-              <JobList jobs={jobs} loading={loading} error={error} onJobClick={() => {}} onRetry={reload} onPublish={handlePublishClick} />
+              <JobList jobs={jobs} loading={loading} error={error} onJobClick={() => {}} onRetry={reload} onPublish={handlePublishClick} onDelete={pubkey ? (j) => setDeleteTarget(j) : undefined} />
             </div>
 
             {/* Sidebar */}
@@ -164,6 +180,15 @@ export function App() {
         <PublishForm
           onClose={() => setShowPublish(false)}
           onSuccess={handlePublishSuccess}
+        />
+      )}
+
+      {/* Delete Modal */}
+      {deleteTarget && (
+        <DeleteModal
+          job={deleteTarget}
+          onConfirm={() => handleDeleteConfirm(deleteTarget)}
+          onClose={() => setDeleteTarget(null)}
         />
       )}
     </div>
