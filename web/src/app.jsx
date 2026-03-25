@@ -37,7 +37,10 @@ export function App() {
     toast.className = 'toast success';
     toast.textContent = t('success');
     document.body.appendChild(toast);
-    setTimeout(() => toast.remove(), 3000);
+    setTimeout(() => {
+      setShowPublish(false);
+      toast.remove();
+    }, 2500);
   };
 
   return (
