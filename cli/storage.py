@@ -115,14 +115,17 @@ class Storage:
         city_code: int,
         content: str,
         created_at: int,
+        federation_id: str | None = None,
     ):
         # Delete existing job with same d_tag (replaceable event)
         self._conn.execute("DELETE FROM jobs WHERE d_tag = ?", (d_tag,))
         self._conn.execute(
             """INSERT INTO jobs
-               (event_id, d_tag, pubkey, province_code, city_code, content, created_at, received_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (event_id, d_tag, pubkey, province_code, city_code, content, created_at, int(time.time())),
+               (event_id, d_tag, pubkey, province_code, city_code, content,
+                created_at, received_at, federation_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (event_id, d_tag, pubkey, province_code, city_code,
+             content, created_at, int(time.time()), federation_id),
         )
         self._conn.commit()
 

@@ -94,6 +94,25 @@ class TestJobs:
         job = db.get_job("id1")
         assert "federation_id" in job
 
+    def test_upsert_job_with_federation_id(self, db):
+        db.upsert_job(
+            event_id="e1", d_tag="d1", pubkey="p1",
+            province_code=110000, city_code=110100,
+            content='{"title":"A"}', created_at=1000,
+            federation_id="fed123",
+        )
+        job = db.get_job("e1")
+        assert job["federation_id"] == "fed123"
+
+    def test_upsert_job_federation_id_none(self, db):
+        db.upsert_job(
+            event_id="e2", d_tag="d2", pubkey="p2",
+            province_code=110000, city_code=110100,
+            content='{"title":"B"}', created_at=1000,
+        )
+        job = db.get_job("e2")
+        assert job["federation_id"] is None
+
 
 class TestRegions:
     def test_upsert_and_get_region(self, db):
