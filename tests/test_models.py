@@ -70,7 +70,7 @@ class TestRegionMapping:
             "province_city": {},
         })
         mapping = parse_region_mapping(raw)
-        assert mapping.province_name_to_code("北京") == "1"
+        assert mapping.province_name_to_code("北京") == 1
         assert mapping.province_name_to_code("不存在") is None
 
     def test_name_to_code_city(self):
@@ -81,5 +81,5 @@ class TestRegionMapping:
             "province_city": {},
         })
         mapping = parse_region_mapping(raw)
-        assert mapping.city_name_to_code("北京市") == "101"
+        assert mapping.city_name_to_code("北京市") == 101
         assert mapping.city_name_to_code("不存在") is None
