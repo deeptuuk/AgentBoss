@@ -243,6 +243,34 @@ class TestJobSearch:
         assert len(jobs) == 1
         assert jobs[0]["event_id"] == "j1"
 
+    def test_list_jobs_filter_federation(self, db):
+        """list_jobs filters by federation via federation_name."""
+        # Setup: create federations and jobs
+        db.upsert_federation(
+            federation_id="fed1",
+            name="techjobs",
+            relay_urls=["wss://r1.example.com"],
+        )
+        db.upsert_job(
+            event_id="e1", d_tag="d1", pubkey="p1",
+            province_code=110000, city_code=110100,
+            content="{}", created_at=1000,
+            federation_id="fed1",
+        )
+        db.upsert_job(
+            event_id="e2", d_tag="d2", pubkey="p2",
+            province_code=110000, city_code=110100,
+            content="{}", created_at=999,
+            federation_id="fed2",
+        )
+        # federation name 不存在返回空
+        results = db.list_jobs(federation_name="nonexistent")
+        assert results == []
+        # 按 name 查询 — 返回 fed1 的职位
+        results = db.list_jobs(federation_name="techjobs")
+        assert len(results) == 1
+        assert results[0]["event_id"] == "e1"
+
 
 class TestJobStatus:
     def test_job_status_table_exists(self, db):
