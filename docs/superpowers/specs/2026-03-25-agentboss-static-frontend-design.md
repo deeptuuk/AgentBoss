@@ -83,7 +83,7 @@ web/
 
 ### 浏览/搜索职位
 1. 用户打开页面 → Preact App 加载
-2. `useJobs` hook 调用 relay 网关，查询 kind:30070 + tag:agentboss/job 事件
+2. `useJobs` hook 调用 relay 网关，查询 kind:30078 + tag:agentboss/job 事件
 3. 解析 event content（JSON）→ 渲染职位列表
 4. 搜索：过滤本地数据或发新查询
 
@@ -116,7 +116,7 @@ const getSigner = () => {
 // 签名发布职位
 const publishJob = async (jobContent) => {
   const event = {
-    kind: 30070,
+    kind: 30078,
     tags: [['d', generateDTag()], ['t', 'agentboss'], ['t', 'job']],
     content: JSON.stringify(jobContent),
     created_at: Math.floor(Date.now() / 1000),
