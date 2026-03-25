@@ -51,7 +51,7 @@ web/
 vi.mock('../lib/relay.js', () => ({
   createRelayClient: () => ({
     connect: vi.fn().mockResolvedValue(undefined),
-    subscribe: vi.fn(),
+    subscribe: vi.fn((id, filter) => {}),  // 签名: (subId, filter)
     close: vi.fn(),
     onEvent: vi.fn(),
     onEOSE: vi.fn((cb) => cb()),  // 同步触发，模拟 relay 响应
@@ -96,8 +96,8 @@ beforeEach(() => {
 
 | 用例 | 描述 |
 |------|------|
-| loading 状态：显示骨架屏 | `getAllByClass('skeleton')`，数量 4 |
-| error 状态：显示错误信息 | `getByText(error)` |
+| loading 状态：显示骨架屏 | `getAllByClassName('skeleton')`，数量 4 |
+| error 状态：显示错误信息 | `getByText(errorMsg)`（errorMsg 为测试注入的错误字符串） |
 | 空状态：无职位时显示 | `getByText('暂无职位')` |
 | 正常列表：渲染 JobCard | `getAllByRole('article')` 数量等于 jobs.length |
 
@@ -109,9 +109,8 @@ beforeEach(() => {
 | loading 初始 true | 第一个状态 |
 | onEOSE 触发后 loading=false | 完整流程 |
 | onEOSE 触发后 jobs 有数据 | 模拟 relay 返回 |
-| searchQuery 过滤 | 过滤后 jobs.length < allJobs.length |
+| searchQuery 过滤生效 | 过滤后 jobs.length < allJobs.length |
 | error 时 error 不为 null | WebSocket 异常路径 |
-| reload 函数重新触发加载 | `loadJobs` 被调用两次 |
 
 ### 6.4 useFavorites.test.js
 
@@ -120,8 +119,9 @@ beforeEach(() => {
 | 初始 count=0 | localStorage 为空 |
 | toggle 添加收藏 | count 从 0 → 1 |
 | toggle 移除收藏 | count 从 1 → 0 |
-| isFavorite 正确返回 true/false | 独立于 toggle |
-| 多个 job 独立管理 | 切换不同 job id |
+| isFavorite 正确返回 | 独立于 toggle 验证 |
+
+**测试用例总数：5 + 4 + 5 + 4 = 18**
 
 ## 7. 实施步骤
 
