@@ -40,11 +40,12 @@ agentboss publish --federation <名称> --province <省> --city <城市> --title
 ## 安装
 ```bash
 # 使用 uv 创建虚拟环境
-uv venv .env
+uv venv .env --python 3.12
 source .env/bin/activate  # Linux/Mac
 # .env\Scripts\activate   # Windows
 
-# 安装项目
+# 安装 pip 和项目
+uv pip install pip
 pip install -e .
 ```
 
