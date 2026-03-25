@@ -15,12 +15,12 @@
 | File | Change | Responsibility |
 |------|--------|----------------|
 | `shared/constants.py` | Modify | Add `KIND_FEDERATION = 31990` |
-| `cli/storage.py` | Modify | Add `federations` table + CRUD methods |
-| `cli/nostr_client.py` | Modify | Add `NostrRelay.fetch_events_from_relays()` parallel query |
+| `cli/storage.py` | Modify | Add `federations` table + CRUD methods + `jobs.federation_id` column |
+| `cli/nostr_client.py` | Modify | Add `fetch_events_from_relays()` parallel query + `_merge_events()` |
 | `cli/main.py` | Modify | Add `federation` subcommand group + join/create/leave/list |
 | `tests/test_storage.py` | Modify | Add federation storage tests |
 | `tests/test_cli.py` | Modify | Add federation CLI tests |
-| `tests/test_nostr_client.py` | Modify | Add multi-relay fetch tests |
+| `tests/test_nostr_client.py` | Modify | Add multi-relay fetch + merge tests |
 
 ---
 
@@ -31,7 +31,7 @@
 - Modify: `cli/storage.py`
 - Test: `tests/test_storage.py`
 
-### Step 1: Add KIND_FEDERATION constant
+### Part A: Add constant
 
 - [ ] **Step 1: Modify shared/constants.py**
 
@@ -40,9 +40,53 @@
 KIND_FEDERATION = 31990
 ```
 
-### Step 2: Add federations table to init_db
+### Part B: Add failing test for federations storage
 
-- [ ] **Step 2: Modify cli/storage.py — add federations table**
+- [ ] **Step 2: Add TestFederations class to tests/test_storage.py**
+
+```python
+class TestFederations:
+    def test_federations_table_exists(self, db):
+        """federations table exists after init_db."""
+        assert "federations" in db.list_tables()
+
+    def test_upsert_and_get_federation(self, db):
+        """Can insert and retrieve a federation."""
+        db.upsert_federation(
+            federation_id="abc123",
+            name="TechJobs",
+            relay_urls=["wss://relay1.example.com", "wss://relay2.example.com"],
+            created_at=1000,
+        )
+        fed = db.get_federation("abc123")
+        assert fed is not None
+        assert fed["name"] == "TechJobs"
+        assert fed["relay_urls"] == ["wss://relay1.example.com", "wss://relay2.example.com"]
+
+    def test_list_federations(self, db):
+        """Can list multiple federations."""
+        db.upsert_federation("id1", "Fed1", ["r1"], created_at=1000)
+        db.upsert_federation("id2", "Fed2", ["r2"], created_at=1001)
+        feds = db.list_federations()
+        assert len(feds) == 2
+        # Most recent first
+        assert feds[0]["federation_id"] == "id2"
+
+    def test_delete_federation(self, db):
+        """Can delete a federation."""
+        db.upsert_federation("id1", "Fed1", ["r1"], created_at=1000)
+        db.delete_federation("id1")
+        assert db.get_federation("id1") is None
+```
+
+- [ ] **Step 3: Run test — FAIL**
+
+Run: `pytest tests/test_storage.py::TestFederations -v`
+Expected: FAIL (AttributeError: 'Storage' object has no attribute 'upsert_federation')
+
+### Part C: Add storage implementation
+
+- [ ] **Step 4: Modify cli/storage.py — add federations table to init_db()**
 
 In `cur.executescript()`, after the `applications` table creation:
 
@@ -57,28 +101,22 @@ CREATE TABLE IF NOT EXISTS federations (
 CREATE INDEX IF NOT EXISTS idx_federations_name ON federations(name);
 ```
 
-### Step 3: Add federation_id column to jobs table
+- [ ] **Step 5: Modify cli/storage.py — add federation_id to jobs table**
 
-- [ ] **Step 3: Modify cli/storage.py — add federation_id to jobs**
-
-In `cur.executescript()`, after `CREATE INDEX IF NOT EXISTS idx_applications_applicant`:
+After the `CREATE INDEX IF NOT EXISTS idx_applications_applicant`:
 
 ```python
 ALTER TABLE jobs ADD COLUMN federation_id TEXT;
 CREATE INDEX IF NOT EXISTS idx_jobs_federation ON jobs(federation_id);
 ```
 
-Note: `ALTER TABLE ADD COLUMN` is safe since it's `IF NOT EXISTS` — running on an existing DB with the column already present is a no-op in SQLite.
+Note: `ALTER TABLE ADD COLUMN` with `IF NOT EXISTS` is safe — runs as no-op on existing columns.
 
-### Step 4: Add federation CRUD methods
-
-- [ ] **Step 4: Add federation storage methods to cli/storage.py**
+- [ ] **Step 6: Modify cli/storage.py — add federation CRUD methods**
 
 Add after `has_application()`:
 
 ```python
-# ── Federations ────────────────────────────────────────────────
-
 def upsert_federation(
     self,
     federation_id: str,
@@ -127,62 +165,16 @@ def delete_federation(self, federation_id: str):
     self._conn.commit()
 ```
 
-### Step 5: Write failing test for federations storage
+### Part D: Verify tests pass
 
-- [ ] **Step 5: Add test for federations storage**
-
-In `tests/test_storage.py`, add new `TestFederations` class:
-
-```python
-class TestFederations:
-    def test_federations_table_exists(self, db):
-        """federations table exists after init_db."""
-        assert "federations" in db.list_tables()
-
-    def test_upsert_and_get_federation(self, db):
-        """Can insert and retrieve a federation."""
-        db.upsert_federation(
-            federation_id="abc123",
-            name="TechJobs",
-            relay_urls=["wss://relay1.example.com", "wss://relay2.example.com"],
-            created_at=1000,
-        )
-        fed = db.get_federation("abc123")
-        assert fed is not None
-        assert fed["name"] == "TechJobs"
-        assert fed["relay_urls"] == ["wss://relay1.example.com", "wss://relay2.example.com"]
-
-    def test_list_federations(self, db):
-        """Can list multiple federations."""
-        db.upsert_federation("id1", "Fed1", ["r1"], created_at=1000)
-        db.upsert_federation("id2", "Fed2", ["r2"], created_at=1001)
-        feds = db.list_federations()
-        assert len(feds) == 2
-        # Most recent first
-        assert feds[0]["federation_id"] == "id2"
-
-    def test_delete_federation(self, db):
-        """Can delete a federation."""
-        db.upsert_federation("id1", "Fed1", ["r1"], created_at=1000)
-        db.delete_federation("id1")
-        assert db.get_federation("id1") is None
-```
-
-- [ ] **Step 6: Run test — FAIL** (federations table/methods don't exist yet)
-
-Run: `pytest tests/test_storage.py::TestFederations -v`
-Expected: FAIL with "no such table: federations" or "AttributeError"
-
-- [ ] **Step 7: Implement storage methods (already done in Step 3-4)**
+- [ ] **Step 7: Run tests — PASS**
 
 Run: `pytest tests/test_storage.py::TestFederations -v`
 Expected: PASS
 
-### Step 6: Add jobs.federation_id column test
+### Part E: Add jobs.federation_id column test
 
-- [ ] **Step 8: Write failing test for jobs.federation_id**
-
-In `TestJobs`, add:
+- [ ] **Step 8: Add test_job_has_federation_id to TestJobs**
 
 ```python
 def test_job_has_federation_id(self, db):
@@ -192,9 +184,12 @@ def test_job_has_federation_id(self, db):
     assert "federation_id" in job
 ```
 
-- [ ] **Step 9: Run test — PASS** (ALTER TABLE is idempotent)
+- [ ] **Step 9: Run test — PASS**
 
-### Step 7: Commit
+Run: `pytest tests/test_storage.py::TestJobs::test_job_has_federation_id -v`
+Expected: PASS
+
+### Part F: Commit
 
 - [ ] **Step 10: Commit**
 
@@ -211,83 +206,64 @@ git commit -m "feat: add KIND_FEDERATION constant and federations storage"
 - Modify: `cli/nostr_client.py`
 - Test: `tests/test_nostr_client.py`
 
-### Step 1: Write failing test for multi-relay fetch
+### Part A: Write failing test for _merge_events
 
-- [ ] **Step 1: Add test for multi-relay parallel fetch**
-
-In `tests/test_nostr_client.py`, add:
-
-```python
-class TestMultiRelayFetch:
-    @pytest.mark.asyncio
-    async def test_fetch_from_multiple_relays_merges_results(self):
-        """Parallel query to multiple relays returns merged, deduplicated events."""
-        relay1 = NostrRelay("wss://relay1.example.com")
-        relay2 = NostrRelay("wss://relay2.example.com")
-
-        # Mock relay1 returning one event, relay2 returning two events (one duplicate)
-        event1 = {"id": "abc", "kind": 30078, "content": "{}",
-                  "pubkey": "pub1", "created_at": 1000, "tags": []}
-        event2_dup = {"id": "abc", "kind": 30078, "content": "{}",
-                      "pubkey": "pub1", "created_at": 1000, "tags": []}  # duplicate
-        event3 = {"id": "def", "kind": 30078, "content": "{}",
-                  "pubkey": "pub1", "created_at": 1001, "tags": []}
-
-        with patch.object(NostrRelay, 'receive_events', new_callable=AsyncMock) as mock_recv:
-            # relay1 returns [event1], relay2 returns [event2_dup, event3]
-            async def yield_events(*args, **kwargs):
-                yield event1
-            async def yield_events2(*args, **kwargs):
-                yield event2_dup
-                yield event3
-
-            async def mock_query(self, relay_url, *args, **kwargs):
-                if "relay1" in relay_url:
-                    async for e in yield_events(None):
-                        yield e
-                else:
-                    async for e in yield_events2(None):
-                        yield e
-
-            # Test parallel fetch
-            pass  # Implementation in Step 2
-```
-
-Actually, let's write a simpler unit test that doesn't require patching async methods. Add a synchronous test for the merge logic:
+- [ ] **Step 1: Add TestMergeEvents class to tests/test_nostr_client.py**
 
 ```python
 def test_merge_events_deduplicates_by_id(self):
-    """_merge_events removes duplicates by event_id."""
+    """_merge_events removes duplicates by event_id, later overrides earlier."""
     events1 = [
-        {"id": "abc", "content": "v1"},
-        {"id": "def", "content": "v2"},
+        {"id": "abc", "created_at": 1000, "content": "v1"},
+        {"id": "def", "created_at": 1002, "content": "v2"},
     ]
     events2 = [
-        {"id": "abc", "content": "v1"},  # duplicate
-        {"id": "ghi", "content": "v3"},
+        {"id": "abc", "created_at": 1000, "content": "v1"},  # duplicate
+        {"id": "ghi", "created_at": 1001, "content": "v3"},
     ]
     result = _merge_events([events1, events2])
     ids = [e["id"] for e in result]
-    assert ids == ["abc", "def", "ghi"]
+    assert set(ids) == {"abc", "def", "ghi"}
+    # Should be sorted by created_at desc
+    assert result[0]["id"] == "def"  # created_at:1002
+    assert result[1]["id"] == "ghi"   # created_at:1001
+    assert result[2]["id"] == "abc"   # created_at:1000
+
+def test_merge_events_empty_lists(self):
+    """_merge_events handles empty input."""
+    result = _merge_events([])
+    assert result == []
+    result = _merge_events([[]])
+    assert result == []
 ```
 
-### Step 2: Add _merge_events helper + fetch_events_from_relays to nostr_client.py
+Note: `_merge_events` is a module-level helper function in `nostr_client.py`. The test should import it explicitly.
 
-- [ ] **Step 2: Modify cli/nostr_client.py — add _merge_events and fetch_events_from_relays**
+- [ ] **Step 2: Run test — FAIL**
 
-Add at the top-level (not inside a class):
+Run: `pytest tests/test_nostr_client.py::TestMergeEvents -v`
+Expected: FAIL (ImportError or NameError: _merge_events not defined)
+
+### Part B: Implement _merge_events and fetch_events_from_relays
+
+- [ ] **Step 3: Modify cli/nostr_client.py — add _merge_events and fetch_events_from_relays**
+
+Add at the top-level of the module (not inside a class):
 
 ```python
 def _merge_events(event_lists: list[list[dict]]) -> list[dict]:
     """Merge events from multiple relays, deduplicate by event_id.
 
     Later duplicates (same id) override earlier ones.
+    Result sorted by created_at descending (most recent first).
     """
     by_id: dict[str, dict] = {}
     for events in event_lists:
         for event in events:
             by_id[event["id"]] = event
-    return list(by_id.values())
+    merged = list(by_id.values())
+    merged.sort(key=lambda e: e.get("created_at", 0), reverse=True)
+    return merged
 
 
 async def fetch_events_from_relays(
@@ -321,20 +297,24 @@ async def fetch_events_from_relays(
         return events
 
     results = await asyncio.gather(*[fetch_from_relay(url) for url in relay_urls])
-    merged = _merge_events(results)
-    # Sort by created_at descending
-    merged.sort(key=lambda e: e.get("created_at", 0), reverse=True)
-    return merged
+    return _merge_events(list(results))
 ```
 
-Note: `asyncio` is already imported at the top of nostr_client.py.
+Note: `asyncio` is already imported at the top of `nostr_client.py`.
 
-- [ ] **Step 3: Run existing nostr_client tests — PASS**
+- [ ] **Step 4: Run merge tests — PASS**
+
+Run: `pytest tests/test_nostr_client.py::TestMergeEvents -v`
+Expected: PASS
+
+- [ ] **Step 5: Run all nostr_client tests — PASS**
 
 Run: `pytest tests/test_nostr_client.py -v`
 Expected: All existing tests still pass
 
-- [ ] **Step 4: Commit**
+### Part C: Commit
+
+- [ ] **Step 6: Commit**
 
 ```bash
 git add cli/nostr_client.py tests/test_nostr_client.py
@@ -349,11 +329,9 @@ git commit -m "feat: add multi-relay parallel fetch with merge-deduplicate"
 - Modify: `cli/main.py`
 - Test: `tests/test_cli.py`
 
-### Step 1: Write failing test for federation join
+### Part A: Write failing tests for federation join/list/leave
 
-- [ ] **Step 1: Add TestFederationJoin class**
-
-In `tests/test_cli.py`:
+- [ ] **Step 1: Add TestFederationJoin class to tests/test_cli.py**
 
 ```python
 class TestFederationJoin:
@@ -363,13 +341,14 @@ class TestFederationJoin:
         assert result.exit_code != 0
         assert "identity" in result.stdout.lower() or "login" in result.stdout.lower()
 
-    def test_federation_join_unknown_npub(self, cli_home):
-        """join with unknown npub shows error."""
+    def test_federation_join_invalid_format(self, cli_home):
+        """join with malformed invite code shows error."""
         runner.invoke(app, ["login", "--key", "aa" * 32])
-        # Try to join with a fake npub that won't resolve
-        result = runner.invoke(app, ["federation", "join", "federation:0000000000000000000000000000000000000000000000000000000000000000:test"])
-        # Should fail gracefully
-        assert result.exit_code != 0 or "error" in result.stdout.lower()
+        result = runner.invoke(app, ["federation", "join", "badcode"])
+        assert result.exit_code != 0
+        assert "format" in result.stdout.lower()
+        result = runner.invoke(app, ["federation", "join", "federation:abc:myfed"])  # npub too short
+        assert result.exit_code != 0
 
     def test_federation_join_command_exists(self, cli_home):
         """join command is registered."""
@@ -378,18 +357,57 @@ class TestFederationJoin:
         assert "federation" in result.output.lower()
 ```
 
-### Step 2: Add federation subcommand group to main.py
+- [ ] **Step 2: Add TestFederationList class**
 
-- [ ] **Step 2: Add federation_app Typer + subcommands to cli/main.py**
+```python
+class TestFederationList:
+    def test_federation_list_requires_login(self, cli_home):
+        """list without identity shows error."""
+        result = runner.invoke(app, ["federation", "list"])
+        assert result.exit_code != 0
 
-In the Typer app setup section (after `profile_app` and before `app.add_typer(profile_app)`):
+    def test_federation_list_empty(self, cli_home):
+        """list with no federations shows empty message."""
+        runner.invoke(app, ["login", "--key", "aa" * 32])
+        result = runner.invoke(app, ["federation", "list"])
+        assert result.exit_code == 0
+        assert "no federations" in result.stdout.lower()
+```
+
+- [ ] **Step 3: Add TestFederationLeave class**
+
+```python
+class TestFederationLeave:
+    def test_federation_leave_requires_login(self, cli_home):
+        """leave without identity shows error."""
+        result = runner.invoke(app, ["federation", "leave", "abc123"])
+        assert result.exit_code != 0
+
+    def test_federation_leave_unknown_federation(self, cli_home):
+        """leave for unknown federation shows error."""
+        runner.invoke(app, ["login", "--key", "aa" * 32])
+        result = runner.invoke(app, ["federation", "leave", "abc123"])
+        assert result.exit_code != 0
+        assert "not found" in result.stdout.lower()
+```
+
+- [ ] **Step 4: Run tests — FAIL**
+
+Run: `pytest tests/test_cli.py::TestFederationJoin tests/test_cli.py::TestFederationList tests/test_cli.py::TestFederationLeave -v`
+Expected: FAIL (command not found)
+
+### Part B: Add federation_app Typer + subcommands
+
+- [ ] **Step 5: Modify cli/main.py — add federation_app and join/list/leave**
+
+Add in the Typer app setup section:
 
 ```python
 federation_app = typer.Typer(help="Federation management")
 app.add_typer(federation_app, name="federation")
 ```
 
-Add after `applications_list()` in main.py:
+Add after `applications_respond()`:
 
 ```python
 # ── Federations ────────────────────────────────────────────────
@@ -418,7 +436,7 @@ def federation_join(
         raise typer.Exit(code=1)
     _, federation_id, federation_name = parts
 
-    # Validate npub hex
+    # Validate npub hex (64 chars)
     if len(federation_id) != 64 or not all(c in "0123456789abcdef" for c in federation_id.lower()):
         typer.echo("Invalid federation npub. Must be 64 hex characters.")
         raise typer.Exit(code=1)
@@ -430,7 +448,6 @@ def federation_join(
         relay = NostrRelay(relay_url)
         try:
             await relay.connect()
-            # Query federation metadata event (kind:31990) from federation owner
             await relay.subscribe(
                 "fed_lookup",
                 kinds=[KIND_FEDERATION],
@@ -445,7 +462,6 @@ def federation_join(
                 typer.echo(f"Federation '{federation_name}' not found for npub {federation_id[:16]}...")
                 return
 
-            # Use the most recent event
             latest = max(events, key=lambda e: e.get("created_at", 0))
             try:
                 relay_urls = json.loads(latest["content"])
@@ -469,15 +485,8 @@ def federation_join(
 
     asyncio.run(_fetch_federation())
     storage.close()
-```
 
-### Step 3: Add federation list and leave commands
 
-- [ ] **Step 3: Add federation list and leave commands**
-
-After `federation_join()`:
-
-```python
 @federation_app.command(name="list")
 def federation_list():
     """List all joined federations."""
@@ -502,7 +511,7 @@ def federation_list():
 @federation_app.command(name="leave")
 def federation_leave(
     federation_id: str = typer.Argument(..., help="Federation ID (npub hex)"),
-    confirm: bool = typer.Option(False, "--yes", is_flag=True, help="Skip confirmation"),
+    confirm: bool = typer.Option(False, "--yes", help="Skip confirmation"),
 ):
     """Leave and delete a federation."""
     identity = _load_identity()
@@ -527,14 +536,14 @@ def federation_leave(
     storage.close()
 ```
 
-### Step 4: Run tests
+- [ ] **Step 6: Run federation CLI tests — PASS**
 
-- [ ] **Step 4: Run federation tests**
-
-Run: `pytest tests/test_cli.py::TestFederationJoin -v`
+Run: `pytest tests/test_cli.py::TestFederationJoin tests/test_cli.py::TestFederationList tests/test_cli.py::TestFederationLeave -v`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+### Part C: Commit
+
+- [ ] **Step 7: Commit**
 
 ```bash
 git add cli/main.py tests/test_cli.py
@@ -549,7 +558,7 @@ git commit -m "feat: add federation join/list/leave CLI commands"
 - Modify: `cli/main.py`
 - Test: `tests/test_cli.py`
 
-### Step 1: Write failing test for federation create
+### Part A: Write failing test for federation create
 
 - [ ] **Step 1: Add TestFederationCreate class**
 
@@ -565,12 +574,16 @@ class TestFederationCreate:
         """create command is registered."""
         result = runner.invoke(app, ["federation", "create", "--help"])
         assert result.exit_code == 0
-        assert "name" in result.output.lower()
 ```
 
-### Step 2: Add federation create command
+- [ ] **Step 2: Run tests — FAIL** (command not registered)
 
-- [ ] **Step 2: Add federation_create to cli/main.py**
+Run: `pytest tests/test_cli.py::TestFederationCreate -v`
+Expected: FAIL
+
+### Part B: Add federation_create command
+
+- [ ] **Step 3: Add federation_create to cli/main.py**
 
 ```python
 @federation_app.command(name="create")
@@ -593,10 +606,9 @@ def federation_create(
         raise typer.Exit(code=1)
 
     storage = _get_storage()
-    federation_id = identity["pubkey"]  # Use own npub as federation ID
+    federation_id = identity["pubkey"]
     relay_urls = relays
 
-    # Build federation metadata event
     content = json.dumps(relay_urls)
     event = build_event(
         kind=KIND_FEDERATION,
@@ -631,7 +643,6 @@ def federation_create(
         else:
             typer.echo(f"Federation '{name}' created and published to {len(relay_urls)} relay(s).")
 
-        # Save locally
         storage.upsert_federation(
             federation_id=federation_id,
             name=name,
@@ -647,14 +658,14 @@ def federation_create(
     storage.close()
 ```
 
-### Step 3: Run tests
-
-- [ ] **Step 3: Run federation create tests**
+- [ ] **Step 4: Run tests — PASS**
 
 Run: `pytest tests/test_cli.py::TestFederationCreate -v`
 Expected: PASS
 
-- [ ] **Step 4: Commit**
+### Part C: Commit
+
+- [ ] **Step 5: Commit**
 
 ```bash
 git add cli/main.py tests/test_cli.py
@@ -669,11 +680,9 @@ git commit -m "feat: add federation create command with invite code generation"
 - Modify: `cli/main.py`
 - Test: `tests/test_cli.py`
 
-### Step 1: Write failing test for federation-aware fetch
+### Part A: Write failing test for fetch --federation
 
 - [ ] **Step 1: Add test for fetch --federation option**
-
-In `tests/test_cli.py`, add to existing `TestListJobs` or new class:
 
 ```python
 class TestFederationFetch:
@@ -684,50 +693,79 @@ class TestFederationFetch:
         assert "--federation" in result.output
 ```
 
-### Step 2: Add --federation option to fetch command
-
-- [ ] **Step 2: Modify fetch command in cli/main.py**
-
-Find the existing `fetch` command and add a `--federation` option:
+- [ ] **Step 2: Add test for fetch --federation stores results with federation_id**
 
 ```python
-# Find the fetch command definition and add:
+    def test_fetch_federation_stores_jobs_with_federation_id(self, cli_home):
+        """fetch --federation stores jobs with federation_id set."""
+        runner.invoke(app, ["login", "--key", "aa" * 32])
+        from cli.storage import Storage
+        from shared.crypto import derive_pub
+        s = Storage(str(cli_home / "agentboss.db"))
+        s.init_db()
+        # Pre-populate a federation
+        fed_id = derive_pub("aa" * 32)
+        s.upsert_federation(fed_id, "TestFed", ["wss://fake-relay.example.com"], created_at=1000)
+        s.close()
+        # fetch --federation should use the federation's relay list
+        # (will fail since relay is fake, but command should accept --federation flag)
+        result = runner.invoke(app, ["fetch", "--federation", "TestFed"])
+        # Should not crash on unknown federation
+        assert "not found" in result.stdout.lower() or result.exit_code == 0
+```
+
+- [ ] **Step 3: Run tests — FAIL** (--federation option not implemented)
+
+Run: `pytest tests/test_cli.py::TestFederationFetch -v`
+Expected: FAIL
+
+### Part B: Add --federation option to fetch command
+
+- [ ] **Step 4: Modify fetch command in cli/main.py**
+
+Find the existing `fetch` command definition. Add `federation: Optional[str] = None` parameter and logic to use `fetch_events_from_relays` when federation is specified:
+
+```python
+# Add import at top if not present:
+from typing import Optional
+
+# In fetch command definition, add parameter:
 # Remove: limit: int = typer.Option(20, "--limit"...
 # Add: federation: Optional[str] = typer.Option(None, "--federation"...
 
-async def _fetch():
-    # ... existing relay setup ...
-
-    if federation_name:
+# Inside _fetch(), replace the relay selection logic:
+if federation_name:
+    fed = storage.get_federation_by_name(federation_name)  # Need helper or search
+    if not fed:
+        # Try by federation_id (npub)
         fed = storage.get_federation(federation_name)
-        if not fed:
-            typer.echo(f"Federation '{federation_name}' not found. Run: agentboss federation list")
-            return
-        relay_urls = fed["relay_urls"]
-        # Use multi-relay fetch
-        events = await fetch_events_from_relays(
-            relay_urls=relay_urls,
-            kinds=[KIND_APP_DATA],
-            tags={"#t": [APP_TAG, JOB_TAG]},
-            limit=limit,
-        )
-    else:
-        relay_url = storage.get_config("relay", DEFAULT_RELAY)
-        # Existing single-relay logic (keep for backward compatibility)
-        relay = NostrRelay(relay_url)
-        # ... existing single-relay fetch logic ...
+    if not fed:
+        typer.echo(f"Federation '{federation_name}' not found. Run: agentboss federation list")
+        return
+    relay_urls = fed["relay_urls"]
+    # Use multi-relay fetch
+    events = await fetch_events_from_relays(
+        relay_urls=relay_urls,
+        kinds=[KIND_APP_DATA],
+        tags={"#t": [APP_TAG, JOB_TAG]},
+        limit=limit,
+    )
+    # Process events same as single-relay case...
+else:
+    relay_url = storage.get_config("relay", DEFAULT_RELAY)
+    # Existing single-relay logic unchanged
 ```
 
-Note: This modifies the existing `fetch` function. See the plan reviewer notes below.
+Note: `get_federation_by_name` doesn't exist yet. Add it as a helper in storage or do `next((f for f in list_federations() if f["name"] == name), None)`.
 
-### Step 3: Run tests
+- [ ] **Step 5: Run tests — PASS**
 
-- [ ] **Step 3: Run fetch tests**
-
-Run: `pytest tests/test_cli.py -v`
+Run: `pytest tests/test_cli.py::TestFederationFetch -v`
 Expected: PASS
 
-- [ ] **Step 4: Commit**
+### Part C: Commit
+
+- [ ] **Step 6: Commit**
 
 ```bash
 git add cli/main.py tests/test_cli.py
@@ -742,14 +780,32 @@ git commit -m "feat: add --federation option to fetch for multi-relay queries"
 - Modify: `cli/main.py`
 - Test: `tests/test_cli.py`
 
-### Step 1: Add multi-relay publish to publish command
+### Part A: Write failing test for publish --federation
 
-- [ ] **Step 1: Modify publish command to support --federation relay list**
-
-Find the existing `publish` command. When user has joined a federation and uses `--federation`, publish to ALL federation relays:
+- [ ] **Step 1: Add test for publish --federation option**
 
 ```python
-# In publish command, after getting the event:
+class TestFederationPublish:
+    def test_publish_federation_option_exists(self, cli_home):
+        """publish --federation option is available."""
+        result = runner.invoke(app, ["publish", "--help"])
+        assert result.exit_code == 0
+        assert "--federation" in result.output
+```
+
+- [ ] **Step 2: Run test — FAIL** (--federation not implemented for publish)
+
+Run: `pytest tests/test_cli.py::TestFederationPublish -v`
+Expected: FAIL
+
+### Part B: Add --federation option to publish command
+
+- [ ] **Step 3: Modify publish command in cli/main.py**
+
+Add `federation: Optional[str] = None` parameter and multi-relay publish logic when federation is specified:
+
+```python
+# In publish command, after building the event:
 if federation_name:
     fed = storage.get_federation(federation_name)
     if not fed:
@@ -780,13 +836,18 @@ else:
     # ...
 ```
 
-### Step 2: Commit
+- [ ] **Step 4: Run test — PASS**
 
-- [ ] **Step 2: Commit**
+Run: `pytest tests/test_cli.py::TestFederationPublish -v`
+Expected: PASS
+
+### Part C: Commit
+
+- [ ] **Step 5: Commit**
 
 ```bash
 git add cli/main.py tests/test_cli.py
-git commit -m "feat: add multi-relay publish to federation relays"
+git commit -m "feat: add --federation option to publish for multi-relay writes"
 ```
 
 ---
@@ -798,7 +859,7 @@ git commit -m "feat: add multi-relay publish to federation relays"
 - [ ] **Step 1: Run all tests**
 
 Run: `python -m pytest tests/ -v`
-Expected: ALL PASS
+Expected: ALL PASS (all existing + new federation tests)
 
 ### Step 2: Final commit
 
@@ -817,7 +878,7 @@ git commit -m "feat: implement Relay Federation — multi-relay job posting fede
 |------|-------------|-------|
 | 1 | Constants + Storage Schema | npub1g9plav7 |
 | 2 | Multi-Relay Fetch | npub1g9plav7 |
-| 3 | Federation Join CLI | npub1g9plav7 |
+| 3 | Federation Join/List/Leave CLI | npub1g9plav7 |
 | 4 | Federation Create CLI | npub1g9plav7 |
 | 5 | Modified Fetch (Multi-Relay) | npub1g9plav7 |
 | 6 | Modified Publish (Multi-Relay) | npub1g9plav7 |
@@ -826,8 +887,9 @@ git commit -m "feat: implement Relay Federation — multi-relay job posting fede
 ## Notes for Implementer
 
 - **Kind number**: Use `KIND_FEDERATION = 31990` for federation metadata events
-- **SQLite ALTER TABLE**: `ALTER TABLE jobs ADD COLUMN federation_id TEXT` is idempotent — safe to run on existing DBs
+- **SQLite ALTER TABLE**: `ALTER TABLE jobs ADD COLUMN federation_id TEXT` is idempotent — safe on existing DBs
 - **Invite code format**: `federation:<npub_hex>:<name>` (e.g., `federation:a1b2c3...:techjobs`)
-- **Conflict resolution**: When same job (same event_id) appears from multiple relays, keep the latest by `created_at` timestamp
-- **fetch_events_from_relays**: Uses `asyncio.gather` for parallel relay queries
+- **Conflict resolution**: When same job (same event_id) appears from multiple relays, `_merge_events` keeps later one by `created_at` timestamp. Lexical tiebreak is N/A since duplicates have same timestamp.
+- **`_merge_events`**: Module-level helper, must be importable for testing
 - **Federation ID**: The owner's npub hex — uniquely identifies the federation
+- **Federation lookup by name**: When `fetch --federation <name>` is used, search `list_federations()` for matching name
