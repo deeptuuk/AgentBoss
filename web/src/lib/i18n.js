@@ -53,6 +53,8 @@ export const translations = {
     err_post: '发布失败，请重试',
     success: '✓ 职位已发布到 Nostr！',
     err_alert_nip07: '请先安装 NIP-07 扩展（如 Alby 或 nos2x）来发布职位',
+    retry: '重试',
+    contact: '联系方式',
   },
   en: {
     search_placeholder: 'Search jobs, companies...',
@@ -106,6 +108,8 @@ export const translations = {
     err_post: 'Failed to post, please try again',
     success: '✓ Job posted to Nostr!',
     err_alert_nip07: 'Please install a NIP-07 extension (e.g. Alby or nos2x) to post',
+    retry: 'Retry',
+    contact: 'Contact',
   },
 };
 

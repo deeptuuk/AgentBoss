@@ -62,6 +62,17 @@ export function JobCard({ job, onClick }) {
           ⚡ {shortPubkey(job.pubkey)}
         </span>
       </div>
+
+      {job.contact && (
+        <div class="job-contact">
+          📧{' '}
+          {job.contact.includes('@') ? (
+            <a href={`mailto:${job.contact}`}>{job.contact}</a>
+          ) : (
+            <span class="job-contact-text">{job.contact}</span>
+          )}
+        </div>
+      )}
     </article>
   );
 }
