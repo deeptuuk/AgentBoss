@@ -62,8 +62,8 @@ def test_upsert_job_federation_id_none(self, db):
 - [ ] **Step 3: 运行测试验证失败**
 
 ```bash
-cd /home/deeptuuk/Code3/AgentBoss
-source /home/deeptuuk/Code3/code_env/bin/activate
+cd /home/deeptuuk/Code4/AgentBoss
+source /home/deeptuuk/Code4/code_env/bin/activate
 python -m pytest tests/test_storage.py::TestJobs::test_upsert_job_with_federation_id tests/test_storage.py::TestJobs::test_upsert_job_federation_id_none -v
 ```
 预期：FAIL（`upsert_job` 暂无 `federation_id` 参数）
@@ -100,6 +100,8 @@ def upsert_job(
 - [ ] **Step 5: 运行测试验证通过**
 
 ```bash
+cd /home/deeptuuk/Code4/AgentBoss
+source /home/deeptuuk/Code4/code_env/bin/activate
 python -m pytest tests/test_storage.py::TestJobs::test_upsert_job_with_federation_id tests/test_storage.py::TestJobs::test_upsert_job_federation_id_none -v
 ```
 预期：PASS
@@ -574,7 +576,8 @@ git commit -m "feat(cli): add --federation filter to list command"
 - [ ] **Step 1: 运行全部测试**
 
 ```bash
-source /home/deeptuuk/Code3/code_env/bin/activate
+cd /home/deeptuuk/Code4/AgentBoss
+source /home/deeptuuk/Code4/code_env/bin/activate
 python -m pytest tests/ -v --tb=short
 ```
 预期：全部 PASS
