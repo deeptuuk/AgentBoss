@@ -509,6 +509,23 @@ a:hover { color: var(--text-accent); }
   gap: 4px;
 }
 
+/* Job Contact */
+.job-contact {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 8px;
+}
+.job-contact a {
+  color: var(--accent);
+  text-decoration: none;
+}
+.job-contact a:hover {
+  text-decoration: underline;
+}
+
 /* ── Sidebar ────────────────────────────────── */
 .sidebar {
   position: sticky;
@@ -791,6 +808,10 @@ a:hover { color: var(--text-accent); }
   font-size: 13px;
   max-width: 300px;
   margin: 0 auto;
+}
+
+.empty-state .btn {
+  margin-top: 16px;
 }
 
 /* ── Footer ─────────────────────────────────── */
