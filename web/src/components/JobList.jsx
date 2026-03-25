@@ -1,4 +1,5 @@
 import { JobCard } from './JobCard.jsx';
+import { t } from '../lib/i18n.js';
 
 export function JobList({ jobs, loading, error, onJobClick }) {
   if (loading) {
@@ -15,7 +16,7 @@ export function JobList({ jobs, loading, error, onJobClick }) {
     return (
       <div class="empty-state">
         <div class="empty-state-icon">⚠</div>
-        <h3>加载失败</h3>
+        <h3>{t('load_error')}</h3>
         <p>{error}</p>
       </div>
     );
@@ -25,8 +26,8 @@ export function JobList({ jobs, loading, error, onJobClick }) {
     return (
       <div class="empty-state">
         <div class="empty-state-icon">📭</div>
-        <h3>暂无职位</h3>
-        <p>成为第一个发布职位的人吧</p>
+        <h3>{t('empty_jobs')}</h3>
+        <p>{t('empty_sub')}</p>
       </div>
     );
   }

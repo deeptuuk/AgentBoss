@@ -1,6 +1,7 @@
 import { useState } from 'preact/hooks';
 import { signEvent } from '../lib/nostr.js';
 import { createRelayClient, generateDTag } from '../lib/relay.js';
+import { t } from '../lib/i18n.js';
 
 export function PublishForm({ onClose, onSuccess }) {
   const [form, setForm] = useState({
@@ -23,10 +24,10 @@ export function PublishForm({ onClose, onSuccess }) {
     e.preventDefault();
     setError(null);
 
-    if (!form.title.trim()) return setError('请填写职位名称');
-    if (!form.company.trim()) return setError('请填写公司名称');
-    if (!form.province.trim()) return setError('请填写省份');
-    if (!form.city.trim()) return setError('请填写城市');
+    if (!form.title.trim()) return setError(t('err_title'));
+    if (!form.company.trim()) return setError(t('err_company'));
+    if (!form.province.trim()) return setError(t('err_province'));
+    if (!form.city.trim()) return setError(t('err_city'));
 
     setSubmitting(true);
 
@@ -50,10 +51,8 @@ export function PublishForm({ onClose, onSuccess }) {
         }),
       };
 
-      // NIP-07 sign
       const signed = await signEvent(event);
 
-      // Publish to relay
       const relay = createRelayClient();
       await relay.connect();
       await relay.publish(signed);
@@ -63,9 +62,9 @@ export function PublishForm({ onClose, onSuccess }) {
       if (onClose) onClose();
     } catch (err) {
       if (err.name === 'NoSignerError') {
-        setError('请先安装 NIP-07 扩展（如 Alby）来签名发布');
+        setError(t('err_nip07'));
       } else {
-        setError(err.message || '发布失败，请重试');
+        setError(t('err_post'));
       }
     } finally {
       setSubmitting(false);
@@ -76,8 +75,8 @@ export function PublishForm({ onClose, onSuccess }) {
     <div class="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose && onClose()}>
       <div class="modal" role="dialog" aria-modal="true" aria-labelledby="publish-title">
         <div class="modal-header">
-          <h2 class="modal-title" id="publish-title">发布职位</h2>
-          <button class="modal-close" onClick={onClose} aria-label="关闭">×</button>
+          <h2 class="modal-title" id="publish-title">{t('form_title')}</h2>
+          <button class="modal-close" onClick={onClose} aria-label="Close">×</button>
         </div>
 
         {error && (
@@ -89,24 +88,24 @@ export function PublishForm({ onClose, onSuccess }) {
         <form onSubmit={handleSubmit}>
           <div class="form-row">
             <div class="form-group">
-              <label class="form-label" for="title">职位名称 *</label>
+              <label class="form-label" for="title">{t('form_title_label')}</label>
               <input
                 id="title"
                 class="form-input"
                 type="text"
-                placeholder="如：高级前端工程师"
+                placeholder={t('form_title_ph')}
                 value={form.title}
                 onInput={handleChange('title')}
                 required
               />
             </div>
             <div class="form-group">
-              <label class="form-label" for="company">公司名称 *</label>
+              <label class="form-label" for="company">{t('form_company_label')}</label>
               <input
                 id="company"
                 class="form-input"
                 type="text"
-                placeholder="如：Nostr Labs"
+                placeholder={t('form_company_ph')}
                 value={form.company}
                 onInput={handleChange('company')}
                 required
@@ -116,24 +115,24 @@ export function PublishForm({ onClose, onSuccess }) {
 
           <div class="form-row">
             <div class="form-group">
-              <label class="form-label" for="province">省份 *</label>
+              <label class="form-label" for="province">{t('form_province_label')}</label>
               <input
                 id="province"
                 class="form-input"
                 type="text"
-                placeholder="如：beijing"
+                placeholder={t('form_province_ph')}
                 value={form.province}
                 onInput={handleChange('province')}
                 required
               />
             </div>
             <div class="form-group">
-              <label class="form-label" for="city">城市 *</label>
+              <label class="form-label" for="city">{t('form_city_label')}</label>
               <input
                 id="city"
                 class="form-input"
                 type="text"
-                placeholder="如：beijing"
+                placeholder={t('form_city_ph')}
                 value={form.city}
                 onInput={handleChange('city')}
                 required
@@ -142,39 +141,39 @@ export function PublishForm({ onClose, onSuccess }) {
           </div>
 
           <div class="form-group">
-            <label class="form-label" for="salary">薪资范围</label>
+            <label class="form-label" for="salary">{t('form_salary_label')}</label>
             <input
               id="salary"
               class="form-input"
               type="text"
-              placeholder="如：30k-50k"
+              placeholder={t('form_salary_ph')}
               value={form.salary}
               onInput={handleChange('salary')}
             />
           </div>
 
           <div class="form-group">
-            <label class="form-label" for="description">职位描述</label>
+            <label class="form-label" for="description">{t('form_desc_label')}</label>
             <textarea
               id="description"
               class="form-textarea"
-              placeholder="描述职位要求、职责..."
+              placeholder={t('form_desc_ph')}
               value={form.description}
               onInput={handleChange('description')}
             />
           </div>
 
           <div class="form-group">
-            <label class="form-label" for="contact">联系方式</label>
+            <label class="form-label" for="contact">{t('form_contact_label')}</label>
             <input
               id="contact"
               class="form-input"
               type="text"
-              placeholder="NIP-05 邮箱或其他联系方式"
+              placeholder={t('form_contact_ph')}
               value={form.contact}
               onInput={handleChange('contact')}
             />
-            <p class="form-hint">可在 contact 字段填写您的 NIP-05（如 alice@nostr.com）</p>
+            <p class="form-hint">{t('form_contact_hint')}</p>
           </div>
 
           <button
@@ -182,7 +181,7 @@ export function PublishForm({ onClose, onSuccess }) {
             type="submit"
             disabled={submitting}
           >
-            {submitting ? '发布中...' : '⚡ 发布到 Nostr'}
+            {submitting ? t('form_submit') : t('form_submit_btn')}
           </button>
         </form>
       </div>
