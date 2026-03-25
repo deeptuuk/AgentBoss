@@ -9,7 +9,7 @@ export const translations = {
     banner_text: 'Nostr 去中心化招聘',
     banner_sub: '开放 · 无需注册 · NIP-07 认证',
     hero_eyebrow: 'Nostr · 去中心化 · 开放',
-    hero_title: '在 Nostr 上发现下一个机会',
+    hero_title: '在 <em>Nostr</em> 上<br />发现下一个机会',
     hero_desc: 'AgentBoss 是基于 Nostr 协议的去中心化招聘平台。无需注册，无中心化平台，用你的 Nostr 公钥身份直接连接。',
     latest_jobs: '最新职位',
     loading_jobs: '加载中...',
