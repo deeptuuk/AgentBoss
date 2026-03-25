@@ -1,4 +1,5 @@
 // Nostr utility — NIP-07 integration
+import { bech32 } from 'bech32';
 
 /**
  * Get the Nostr signer (NIP-07 extension or none).
@@ -43,13 +44,47 @@ export function hasSigner() {
   return !!(window.nostr && typeof window.nostr.signEvent === 'function');
 }
 
+// ── Hex ↔ Bytes ──────────────────────────────────────────────────────────
+
 /**
- * Get npub from hex pubkey (Bech32 encoding).
+ * Convert a hex string to a Uint8Array of bytes.
+ */
+function hexToBytes(hex) {
+  const len = hex.length >> 1;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = parseInt(hex.substring(i << 1, (i << 1) + 2), 16);
+  }
+  return bytes;
+}
+
+// ── Bech32 (npub/note) — via bech32 npm package ─────────────────────────────
+
+/**
+ * Encode a hex pubkey to npub format.
+ * @param {string} hex - 64-character hex string
+ * @returns {string} npub1... bech32 encoded string
  */
 export function hexToNpub(hex) {
-  // Simplified: return truncated hex for display
-  // Full implementation would use bech32 encoding
-  return hex;
+  const padded = hex.padStart(64, '0');
+  const bytes = hexToBytes(padded);
+  const words = bech32.toWords(bytes); // convertBits(bytes, 8, 5, true) → 52 groups
+  return bech32.encode('npub', words);
+}
+
+/**
+ * Decode an npub string back to hex pubkey.
+ * @param {string} npub - npub1... bech32 string
+ * @returns {string} 64-character hex string
+ */
+export function npubToHex(npub) {
+  const { prefix, words } = bech32.decode(npub);
+  if (prefix !== 'npub') throw new Error('Invalid npub: wrong prefix');
+  const bytes = bech32.fromWords(words); // convertBits(words, 5, 8, false) → 33 bytes
+  // fromWords returns 33 bytes (33×8=264 bits, last 4 bits are padding zeros)
+  // The 33rd byte is just padding → drop it
+  const hex = Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('');
+  return hex.slice(0, 64);
 }
 
 /**
