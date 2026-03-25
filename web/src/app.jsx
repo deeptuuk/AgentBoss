@@ -63,9 +63,7 @@ export function App() {
           {/* Hero */}
           <section class="hero">
             <p class="hero-eyebrow">{t('hero_eyebrow')}</p>
-            <h1>
-              在 <em>Nostr</em> 上<br />发现下一个机会
-            </h1>
+            <h1 dangerouslySetInnerHTML={{ __html: t('hero_title') }} />
             <p class="hero-desc">{t('hero_desc')}</p>
           </section>
 
