@@ -28,7 +28,7 @@
 - [ ] **Step 1: 阅读现有测试确认断言内容**
 
 ```bash
-cd /home/deeptuuk/Code3/AgentBoss
+cd /home/deeptuuk/Code4/AgentBoss
 grep -n "province_name_to_code\|city_name_to_code\|test_name_to_code" tests/test_models.py
 ```
 
@@ -69,7 +69,7 @@ assert mapping.city_name_to_code("不存在") is None
 - [ ] **Step 4: 运行全部测试验证通过**
 
 ```bash
-source /home/deeptuuk/Code3/code_env/bin/activate
+source /home/deeptuuk/Code4/code_env/bin/activate
 python -m pytest tests/test_models.py -v
 ```
 预期：全部 PASS
