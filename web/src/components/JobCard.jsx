@@ -15,7 +15,7 @@ function shortPubkey(hex, len = 6) {
   return `${hex.slice(0, len)}…`;
 }
 
-export function JobCard({ job, onClick }) {
+export function JobCard({ job, onClick, onDelete }) {
   const { isFavorite, toggleFavorite } = useFavorites();
   const fav = isFavorite(job.id);
 
@@ -28,14 +28,26 @@ export function JobCard({ job, onClick }) {
     <article class="job-card" onClick={() => onClick && onClick(job)}>
       <div class="job-card-header">
         <h3 class="job-title">{job.title}</h3>
-        <button
-          class={`job-favorite ${fav ? 'active' : ''}`}
-          onClick={handleFav}
-          title={fav ? t('unfavorite') : t('favorite')}
-          aria-label={fav ? t('unfavorite') : t('favorite')}
-        >
-          {fav ? '★' : '☆'}
-        </button>
+        <div class="job-card-actions">
+          <button
+            class={`job-favorite ${fav ? 'active' : ''}`}
+            onClick={handleFav}
+            title={fav ? t('unfavorite') : t('favorite')}
+            aria-label={fav ? t('unfavorite') : t('favorite')}
+          >
+            {fav ? '★' : '☆'}
+          </button>
+          {onDelete && (
+            <button
+              class="job-delete"
+              onClick={(e) => { e.stopPropagation(); onDelete(job); }}
+              title={t('delete')}
+              aria-label={t('delete')}
+            >
+              🗑
+            </button>
+          )}
+        </div>
       </div>
 
       <div class="job-company">

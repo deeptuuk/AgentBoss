@@ -1,5 +1,6 @@
 // Nostr utility — NIP-07 integration
 import { bech32 } from 'bech32';
+import { createRelayClient } from './relay.js';
 
 /**
  * Get the Nostr signer (NIP-07 extension or none).
@@ -93,4 +94,29 @@ export function npubToHex(npub) {
 export function shortPubkey(hex, len = 8) {
   if (!hex) return '';
   return `${hex.slice(0, len)}…`;
+}
+
+// ── NIP-78 Job Deletion ──────────────────────────────────────────────────
+
+/**
+ * Delete a job posting — NIP-78 kind:5 deletion event.
+ * @param {string} dTag - The d tag of the job to delete
+ * @param {string} pubkey - The author's pubkey
+ */
+export async function deleteJob(dTag, pubkey) {
+  const event = {
+    kind: 5,
+    tags: [
+      ['d', dTag],
+      ['a', `30078:${pubkey}:${dTag}`],
+    ],
+    content: '',
+    created_at: Math.floor(Date.now() / 1000),
+  };
+  const signed = await signEvent(event);
+  const relay = createRelayClient();
+  await relay.connect();
+  await relay.publish(signed);
+  relay.close();
+  return signed;
 }

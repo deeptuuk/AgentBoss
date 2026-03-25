@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'preact/hooks';
 import { createRelayClient, parseJobEvent, buildJobFilter } from '../lib/relay.js';
+import { useDeletedJobs } from './useDeletedJobs.js';
 
 const FAVORITES_KEY = 'agentboss_favorites';
 
@@ -8,6 +9,7 @@ export function useJobs({ province, city, searchQuery } = {}) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const requestIdRef = useRef(0);
+  const { isDeleted } = useDeletedJobs();
 
   const loadJobs = useCallback(async () => {
     const currentId = ++requestIdRef.current;
@@ -33,13 +35,14 @@ export function useJobs({ province, city, searchQuery } = {}) {
         let filtered = allJobs;
         if (searchQuery) {
           const q = searchQuery.toLowerCase();
-          filtered = allJobs.filter(
+          filtered = filtered.filter(
             (j) =>
               j.title.toLowerCase().includes(q) ||
               j.company.toLowerCase().includes(q) ||
               j.description.toLowerCase().includes(q)
           );
         }
+        filtered = filtered.filter((j) => !isDeleted(j.d_tag));
 
         setJobs(filtered);
         setLoading(false);

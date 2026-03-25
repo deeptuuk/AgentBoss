@@ -55,6 +55,11 @@ export const translations = {
     err_alert_nip07: '请先安装 NIP-07 扩展（如 Alby 或 nos2x）来发布职位',
     retry: '重试',
     contact: '联系方式',
+    delete: '删除',
+    delete_title: '确认删除职位？',
+    delete_confirm: '删除后无法恢复。',
+    cancel: '取消',
+    delete_confirm_btn: '确认删除',
   },
   en: {
     search_placeholder: 'Search jobs, companies...',
@@ -110,6 +115,11 @@ export const translations = {
     err_alert_nip07: 'Please install a NIP-07 extension (e.g. Alby or nos2x) to post',
     retry: 'Retry',
     contact: 'Contact',
+    delete: 'Delete',
+    delete_title: 'Delete this job?',
+    delete_confirm: 'This action cannot be undone.',
+    cancel: 'Cancel',
+    delete_confirm_btn: 'Confirm Delete',
   },
 };
 
