@@ -157,7 +157,7 @@ describe('JobCard', () => {
 ```bash
 cd /home/deeptuuk/Code4/AgentBoss/web
 npm run test:run -- src/__tests__/JobCard.test.jsx
-# 预期：7 tests passed
+# 预期：5 tests passed
 ```
 
 - [ ] **Step 3: 提交**
