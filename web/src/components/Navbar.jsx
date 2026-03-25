@@ -1,6 +1,7 @@
 import { useState } from 'preact/hooks';
 import { useAuth } from '../hooks/useAuth.js';
 import { LanguageSwitch } from './LanguageSwitch.jsx';
+import { hexToNpub } from '../lib/nostr.js';
 import { t } from '../lib/i18n.js';
 
 export function Navbar({ onSearch, onPublish }) {
@@ -36,8 +37,8 @@ export function Navbar({ onSearch, onPublish }) {
           <LanguageSwitch />
 
           {pubkey ? (
-            <span class="pubkey-badge" title={pubkey}>
-              ⚡ {pubkey.slice(0, 8)}…
+            <span class="pubkey-badge" title={hexToNpub(pubkey)}>
+              ⚡ {hexToNpub(pubkey).slice(0, 12)}…
             </span>
           ) : hasSigner ? (
             <span class="pubkey-badge" style="color: var(--accent)">
