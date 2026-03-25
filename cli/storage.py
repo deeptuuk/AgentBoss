@@ -115,14 +115,17 @@ class Storage:
         city_code: int,
         content: str,
         created_at: int,
+        federation_id: str | None = None,
     ):
         # Delete existing job with same d_tag (replaceable event)
         self._conn.execute("DELETE FROM jobs WHERE d_tag = ?", (d_tag,))
         self._conn.execute(
             """INSERT INTO jobs
-               (event_id, d_tag, pubkey, province_code, city_code, content, created_at, received_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (event_id, d_tag, pubkey, province_code, city_code, content, created_at, int(time.time())),
+               (event_id, d_tag, pubkey, province_code, city_code, content,
+                created_at, received_at, federation_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (event_id, d_tag, pubkey, province_code, city_code,
+             content, created_at, int(time.time()), federation_id),
         )
         self._conn.commit()
 
@@ -249,6 +252,7 @@ class Storage:
         favorited: bool | None = None,
         applied: bool | None = None,
         search_query: str | None = None,
+        federation_name: str | None = None,
     ) -> list[dict]:
         query = "SELECT jobs.* FROM jobs LEFT JOIN job_status ON jobs.event_id = job_status.event_id WHERE 1=1"
         params: list = []
@@ -275,6 +279,15 @@ class Storage:
                     " OR LOWER(json_extract(jobs.content, '$.description')) LIKE ? ESCAPE '\\' COLLATE NOCASE)"
                 )
                 params.extend([pattern, pattern, pattern])
+        if federation_name is not None:
+            fed = next(
+                (f for f in self.list_federations() if f["name"] == federation_name),
+                None,
+            )
+            if fed is None:
+                return []
+            query += " AND jobs.federation_id = ?"
+            params.append(fed["federation_id"])
         query += " ORDER BY jobs.created_at DESC"
         rows = self._conn.execute(query, params).fetchall()
         return [dict(r) for r in rows]

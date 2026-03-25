@@ -182,6 +182,22 @@ def publish(
                 for f in failed:
                     typer.echo(f"  - {f}")
             else:
+                # Extract d_tag from event tags
+                d_tag = ""
+                for tag in event.get("tags", []):
+                    if tag[0] == "d":
+                        d_tag = tag[1]
+                        break
+                storage.upsert_job(
+                    event_id=event["id"],
+                    d_tag=d_tag,
+                    pubkey=event["pubkey"],
+                    province_code=prov_code,
+                    city_code=city_code,
+                    content=event["content"],
+                    created_at=event["created_at"],
+                    federation_id=fed["federation_id"],
+                )
                 typer.echo(f"Published to all {len(relay_urls)} federation relays.")
             return
 
@@ -265,6 +281,7 @@ def fetch(
                         city_code=ccode,
                         content=event["content"],
                         created_at=event["created_at"],
+                        federation_id=fed["federation_id"],
                     )
                     count += 1
             max_jobs = int(storage.get_config("max-jobs", str(DEFAULT_MAX_JOBS)))
@@ -324,6 +341,7 @@ def list_jobs(
     favorited: bool = typer.Option(False, "--favorited", is_flag=True, help="Show only favorited jobs"),
     applied: bool = typer.Option(False, "--applied", is_flag=True, help="Show only applied jobs"),
     search: Optional[str] = typer.Option(None, "--search", help="Search keywords (space-separated, AND match)"),
+    federation: Optional[str] = typer.Option(None, "--federation", help="Filter by federation name"),
 ):
     """List locally stored job postings."""
     storage = _get_storage()
@@ -336,12 +354,20 @@ def list_jobs(
     if city:
         city_code_val = resolver.city_code(city)
 
+    if federation:
+        fed = next((f for f in storage.list_federations() if f["name"] == federation), None)
+        if not fed:
+            typer.echo(f"Federation '{federation}' not found. Run: agentboss federation list")
+            storage.close()
+            return
+
     jobs = storage.list_jobs(
         province_code=prov_code,
         city_code=city_code_val,
         favorited=favorited or None,
         applied=applied or None,
         search_query=search,
+        federation_name=federation,
     )
     if not jobs:
         typer.echo("No jobs found.")

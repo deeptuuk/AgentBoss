@@ -121,6 +121,120 @@ class TestStorageWorkflow:
         storage.close()
 
 
+class TestFederationPublishWorkflow:
+    def test_publish_to_federation_persists_federation_id(self, cli_home):
+        """publish --federation writes federation_id to local storage."""
+        from cli.main import app
+        from cli.nostr_client import NostrRelay
+        from cli.storage import Storage
+
+        db_path = str(cli_home / "agentboss.db")
+
+        # Create a fresh storage for the mock to use (separate from test's db_read)
+        db = Storage(db_path)
+        db.init_db()
+        db.upsert_region(1, "beijing", "province")
+        db.upsert_region(101, "beijing", "city", parent_code=1)
+        db.upsert_federation(
+            federation_id="fed_pub_test",
+            name="testfed",
+            relay_urls=["wss://fake.example.com"],
+        )
+
+        # Mock identity and NostrRelay
+        import unittest.mock as mock
+        mock_publish = mock.AsyncMock(return_value={"event_id": "fake-id", "accepted": True, "message": "ok"})
+        mock_connect = mock.AsyncMock()
+        mock_close = mock.AsyncMock()
+
+        def make_storage():
+            s = Storage(db_path)
+            s.init_db()
+            s.upsert_region(1, "beijing", "province")
+            s.upsert_region(101, "beijing", "city", parent_code=1)
+            s.upsert_federation(federation_id="fed_pub_test", name="testfed",
+                                relay_urls=["wss://fake.example.com"])
+            return s
+
+        with mock.patch("cli.main._load_identity", return_value={
+            "privkey": "a" * 64,
+            "pubkey": "b" * 64,
+            "npub": "npub1test",
+        }), mock.patch("cli.main._get_storage", side_effect=make_storage), \
+             mock.patch.object(NostrRelay, "connect", mock_connect), \
+             mock.patch.object(NostrRelay, "close", mock_close), \
+             mock.patch.object(NostrRelay, "publish_event", mock_publish):
+            result = runner.invoke(app, ["publish",
+                "--province", "beijing",
+                "--city", "beijing",
+                "--title", "Engineer",
+                "--company", "Corp",
+                "--federation", "testfed",
+            ])
+            assert result.exit_code == 0, f"Exit code: {result.exit_code}, output: {result.output}"
+
+        # Verify federation_id was written (fresh connection; db was closed by publish)
+        db2 = Storage(db_path)
+        db2.init_db()
+        jobs = db2.list_jobs()
+        assert len(jobs) >= 1
+        assert jobs[0]["federation_id"] == "fed_pub_test"
+        db2.close()
+
+    def test_fetch_from_federation_persists_federation_id(self, cli_home):
+        """fetch --federation writes federation_id to local storage."""
+        from cli.main import app
+        from cli.storage import Storage
+        import cli.main
+
+        db_path = str(cli_home / "agentboss.db")
+        db = Storage(db_path)
+        db.init_db()
+        db.upsert_region(110000, "beijing", "province")
+        db.upsert_region(110100, "beijing", "city", parent_code=110000)
+        db.upsert_federation(
+            federation_id="fed_fetch_test",
+            name="fetchfed",
+            relay_urls=["wss://fake.example.com"],
+        )
+
+        def make_storage():
+            s = Storage(db_path)
+            s.init_db()
+            s.upsert_region(110000, "beijing", "province")
+            s.upsert_region(110100, "beijing", "city", parent_code=110000)
+            s.upsert_federation(
+                federation_id="fed_fetch_test",
+                name="fetchfed",
+                relay_urls=["wss://fake.example.com"],
+            )
+            return s
+
+        async def mock_fetch_from_relays(relay_urls, kinds, tags, limit):
+            return [{
+                "id": "evt_fetch_1",
+                "pubkey": "pk1",
+                "created_at": 1000,
+                "kind": 30078,
+                "tags": [["d", "dtag1"], ["t", "agentboss"], ["t", "job"], ["province", "110000"]],
+                "content": '{"title":"SRE","company":"Co","version":1}',
+            }]
+
+        import unittest.mock as mock
+        with mock.patch("cli.main._get_storage", side_effect=make_storage), \
+             mock.patch.object(cli.main, "fetch_events_from_relays", mock_fetch_from_relays):
+            result = runner.invoke(app, ["fetch", "--federation", "fetchfed", "--limit", "10"])
+            assert result.exit_code == 0, f"CLI failed: {result.output}"
+
+        # Verify federation_id was written
+        db2 = Storage(db_path)
+        db2.init_db()
+        jobs = db2.list_jobs()
+        assert len(jobs) >= 1
+        assert jobs[0]["federation_id"] == "fed_fetch_test"
+        db2.close()
+
+
 class TestWebRegistrationWorkflow:
     def test_register_and_login(self, tmp_path, monkeypatch):
         monkeypatch.setenv("AGENTBOSS_WEB_DB", str(tmp_path / "users.db"))
@@ -150,7 +264,85 @@ class TestWebRegistrationWorkflow:
         })
         assert resp.status_code == 200
 
-        # Get key
         resp = client.get("/api/key")
         assert resp.status_code == 200
         assert resp.json()["nsec"] == nsec
+
+
+class TestListFederationFilter:
+    def test_list_filter_by_federation(self, cli_home):
+        """list --federation filters jobs by federation."""
+        from cli.main import list_jobs
+        import cli.main
+
+        db = Storage(str(cli_home / "agentboss.db"))
+        db.init_db()
+        db.upsert_region(1, "beijing", "province")
+        db.upsert_region(101, "beijing", "city", parent_code=1)
+        db.upsert_federation("fed_list_1", "listfed1", ["wss://r1"])
+        db.upsert_federation("fed_list_2", "listfed2", ["wss://r2"])
+        db.upsert_job("id1", "d1", "p", 1, 101, "{}", 1000, federation_id="fed_list_1")
+        db.upsert_job("id2", "d2", "p", 1, 101, "{}", 999, federation_id="fed_list_2")
+        db.close()
+
+        def make_storage():
+            s = Storage(str(cli_home / "agentboss.db"))
+            s.init_db()
+            s.upsert_region(1, "beijing", "province")
+            s.upsert_region(101, "beijing", "city", parent_code=1)
+            s.upsert_federation("fed_list_1", "listfed1", ["wss://r1"])
+            s.upsert_federation("fed_list_2", "listfed2", ["wss://r2"])
+            s.upsert_job("id1", "d1", "p", 1, 101, "{}", 1000, federation_id="fed_list_1")
+            s.upsert_job("id2", "d2", "p", 1, 101, "{}", 999, federation_id="fed_list_2")
+            return s
+
+        import unittest.mock as mock
+        with mock.patch.object(cli.main, "_get_storage", side_effect=make_storage):
+            # All jobs
+            result = runner.invoke(app, ["list"])
+            assert result.exit_code == 0
+
+            # Filter by federation
+            result = runner.invoke(app, ["list", "--federation", "listfed1"])
+            assert result.exit_code == 0
+            assert "id1" in result.output
+            assert "id2" not in result.output
+
+            # Federation not found — friendly message, no crash
+            result = runner.invoke(app, ["list", "--federation", "nonexistent"])
+            assert result.exit_code == 0
+
+    def test_list_federation_with_province(self, cli_home):
+        """list --federation --province combines filters."""
+        from cli.main import list_jobs
+        import cli.main
+
+        db = Storage(str(cli_home / "agentboss.db"))
+        db.init_db()
+        db.upsert_region(110000, "beijing", "province")
+        db.upsert_region(110100, "beijing", "city", parent_code=110000)
+        db.upsert_region(310000, "shanghai", "province")
+        db.upsert_region(310100, "shanghai", "city", parent_code=310000)
+        db.upsert_federation("fed_comb", "combined", ["wss://r1"])
+        db.upsert_job("cid1", "cd1", "p", 110000, 110100, "{}", 1000, federation_id="fed_comb")
+        db.upsert_job("cid2", "cd2", "p", 310000, 310100, "{}", 999, federation_id="fed_comb")
+        db.close()
+
+        def make_storage():
+            s = Storage(str(cli_home / "agentboss.db"))
+            s.init_db()
+            s.upsert_region(110000, "beijing", "province")
+            s.upsert_region(110100, "beijing", "city", parent_code=110000)
+            s.upsert_region(310000, "shanghai", "province")
+            s.upsert_region(310100, "shanghai", "city", parent_code=310000)
+            s.upsert_federation("fed_comb", "combined", ["wss://r1"])
+            s.upsert_job("cid1", "cd1", "p", 110000, 110100, "{}", 1000, federation_id="fed_comb")
+            s.upsert_job("cid2", "cd2", "p", 310000, 310100, "{}", 999, federation_id="fed_comb")
+            return s
+
+        import unittest.mock as mock
+        with mock.patch.object(cli.main, "_get_storage", side_effect=make_storage):
+            result = runner.invoke(app, ["list", "--federation", "combined", "--province", "beijing"])
+            assert result.exit_code == 0
+            assert "cid1" in result.output
+            assert "cid2" not in result.output

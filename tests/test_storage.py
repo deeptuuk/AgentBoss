@@ -94,6 +94,25 @@ class TestJobs:
         job = db.get_job("id1")
         assert "federation_id" in job
 
+    def test_upsert_job_with_federation_id(self, db):
+        db.upsert_job(
+            event_id="e1", d_tag="d1", pubkey="p1",
+            province_code=110000, city_code=110100,
+            content='{"title":"A"}', created_at=1000,
+            federation_id="fed123",
+        )
+        job = db.get_job("e1")
+        assert job["federation_id"] == "fed123"
+
+    def test_upsert_job_federation_id_none(self, db):
+        db.upsert_job(
+            event_id="e2", d_tag="d2", pubkey="p2",
+            province_code=110000, city_code=110100,
+            content='{"title":"B"}', created_at=1000,
+        )
+        job = db.get_job("e2")
+        assert job["federation_id"] is None
+
 
 class TestRegions:
     def test_upsert_and_get_region(self, db):
@@ -223,6 +242,34 @@ class TestJobSearch:
         jobs = db.search_jobs("100%")
         assert len(jobs) == 1
         assert jobs[0]["event_id"] == "j1"
+
+    def test_list_jobs_filter_federation(self, db):
+        """list_jobs filters by federation via federation_name."""
+        # Setup: create federations and jobs
+        db.upsert_federation(
+            federation_id="fed1",
+            name="techjobs",
+            relay_urls=["wss://r1.example.com"],
+        )
+        db.upsert_job(
+            event_id="e1", d_tag="d1", pubkey="p1",
+            province_code=110000, city_code=110100,
+            content="{}", created_at=1000,
+            federation_id="fed1",
+        )
+        db.upsert_job(
+            event_id="e2", d_tag="d2", pubkey="p2",
+            province_code=110000, city_code=110100,
+            content="{}", created_at=999,
+            federation_id="fed2",
+        )
+        # federation name 不存在返回空
+        results = db.list_jobs(federation_name="nonexistent")
+        assert results == []
+        # 按 name 查询 — 返回 fed1 的职位
+        results = db.list_jobs(federation_name="techjobs")
+        assert len(results) == 1
+        assert results[0]["event_id"] == "e1"
 
 
 class TestJobStatus:
