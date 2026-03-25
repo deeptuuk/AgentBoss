@@ -46,7 +46,13 @@ source .env/bin/activate  # Linux/Mac
 
 # 安装 pip 和项目
 uv pip install pip
+
+# 方式一：pip 安装
 pip install -e .
+
+# 方式二：uv lock 管理依赖
+uv lock
+uv sync
 ```
 
 ## 运行环境
