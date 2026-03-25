@@ -1,22 +1,41 @@
-import { useState } from 'preact/hooks';
+import { useState, useEffect } from 'preact/hooks';
 import { Navbar } from './components/Navbar.jsx';
 import { JobList } from './components/JobList.jsx';
 import { PublishForm } from './components/PublishForm.jsx';
 import { useJobs } from './hooks/useJobs.js';
 import { useFavorites } from './hooks/useFavorites.js';
 import { hasSigner } from './lib/nostr.js';
+import { t, getLang, subscribeToLang } from './lib/i18n.js';
 
 export function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showPublish, setShowPublish] = useState(false);
+  // Force re-render when language changes via subscribeToLang
+  const [_langVersion, setLangVersion] = useState(0);
   const { jobs, loading, error } = useJobs({ searchQuery });
   const { count: favCount } = useFavorites();
 
+  // Subscribe to language changes — triggers re-render on switch
+  useEffect(() => {
+    const unsub = subscribeToLang(() => setLangVersion((v) => v + 1));
+    return unsub;
+  }, []);
+
+  // Read language once to keep unused variable lint happy
+  void getLang();
+
+  const handlePublishClick = () => {
+    if (!hasSigner()) {
+      alert(t('err_alert_nip07'));
+      return;
+    }
+    setShowPublish(true);
+  };
+
   const handlePublishSuccess = () => {
-    // Toast notification
     const toast = document.createElement('div');
     toast.className = 'toast success';
-    toast.textContent = '✓ 职位已发布到 Nostr！';
+    toast.textContent = t('success');
     document.body.appendChild(toast);
     setTimeout(() => toast.remove(), 3000);
   };
@@ -26,22 +45,16 @@ export function App() {
       {/* Banner */}
       <div class="banner">
         <span class="banner-dot" />
-        Nostr 去中心化招聘
+        {t('banner_text')}
         <span class="banner-dot" />
-        开放 · 无需注册 · NIP-07 认证
+        {t('banner_sub')}
         <span class="banner-dot" />
       </div>
 
       {/* Navbar */}
       <Navbar
         onSearch={setSearchQuery}
-        onPublish={() => {
-          if (!hasSigner()) {
-            alert('请先安装 NIP-07 扩展（如 Alby 或 nos2x）来发布职位');
-            return;
-          }
-          setShowPublish(true);
-        }}
+        onPublish={handlePublishClick}
       />
 
       {/* Main Content */}
@@ -49,14 +62,11 @@ export function App() {
         <div class="container">
           {/* Hero */}
           <section class="hero">
-            <p class="hero-eyebrow">Nostr · 去中心化 · 开放</p>
+            <p class="hero-eyebrow">{t('hero_eyebrow')}</p>
             <h1>
               在 <em>Nostr</em> 上<br />发现下一个机会
             </h1>
-            <p class="hero-desc">
-              AgentBoss 是基于 Nostr 协议的去中心化招聘平台。
-              无需注册，无中心化平台，用你的 Nostr 公钥身份直接连接。
-            </p>
+            <p class="hero-desc">{t('hero_desc')}</p>
           </section>
 
           {/* Jobs Layout */}
@@ -64,9 +74,9 @@ export function App() {
             {/* Job Feed */}
             <div>
               <div class="jobs-section-title">
-                <span>最新职位</span>
+                <span>{t('latest_jobs')}</span>
                 <span style="color: var(--text-muted); font-size: 11px">
-                  {loading ? '加载中...' : `${jobs.length} 个职位`}
+                  {loading ? t('loading_jobs') : `${jobs.length} ${t('jobs_count')}`}
                 </span>
               </div>
               <JobList jobs={jobs} loading={loading} error={error} />
@@ -76,22 +86,22 @@ export function App() {
             <aside class="sidebar">
               {/* Stats Widget */}
               <div class="sidebar-widget">
-                <div class="sidebar-title">数据概览</div>
+                <div class="sidebar-title">{t('data_overview')}</div>
                 <div class="stats-grid">
                   <div class="stat-item">
                     <div class="stat-value">{jobs.length}</div>
-                    <div class="stat-label">职位</div>
+                    <div class="stat-label">{t('jobs')}</div>
                   </div>
                   <div class="stat-item">
                     <div class="stat-value">{favCount}</div>
-                    <div class="stat-label">收藏</div>
+                    <div class="stat-label">{t('favorites')}</div>
                   </div>
                 </div>
               </div>
 
               {/* Tags Widget */}
               <div class="sidebar-widget">
-                <div class="sidebar-title">热门标签</div>
+                <div class="sidebar-title">{t('popular_tags')}</div>
                 <div class="tag-cloud">
                   <button class="cloud-tag" onClick={() => setSearchQuery('remote')}>🌍 Remote</button>
                   <button class="cloud-tag" onClick={() => setSearchQuery('engineering')}>💻 Engineering</button>
@@ -108,10 +118,10 @@ export function App() {
               {!hasSigner() && (
                 <div class="sidebar-widget" style="border-color: var(--accent-border)">
                   <div class="sidebar-title" style="color: var(--accent)">
-                    ⚡ 需要 NIP-07 扩展
+                    {t('need_nip07')}
                   </div>
                   <p style="font-size: 12px; color: var(--text-muted); line-height: 1.6; margin-bottom: 12px">
-                    安装浏览器扩展来签名发布职位：
+                    {t('install_ext')}
                   </p>
                   <div style="display: flex; flex-direction: column; gap: 8px;">
                     <a
@@ -142,9 +152,9 @@ export function App() {
 
       {/* Footer */}
       <footer class="footer">
-        AgentBoss · Nostr 去中心化招聘 ·
+        {t('footer_text')} ·
         <a href="https://github.com/nicholasyangyang/AgentBoss" target="_blank" rel="noopener">
-          GitHub
+          {t('github')}
         </a>
       </footer>
 
