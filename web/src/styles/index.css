@@ -1003,3 +1003,47 @@ a:hover { color: var(--text-accent); }
   border-color: var(--text-muted);
   color: var(--text);
 }
+
+/* ── Navbar Tabs ──────────────────────────── */
+.navbar-tabs {
+  display: flex;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.navbar-tab {
+  background: none;
+  border: none;
+  padding: 4px 12px;
+  font-size: 13px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+  font-family: inherit;
+}
+.navbar-tab:hover {
+  background: var(--bg-secondary);
+  color: var(--text);
+}
+.navbar-tab.active {
+  background: var(--bg-secondary);
+  color: var(--accent);
+  font-weight: 500;
+}
+
+/* ── Edit Button ──────────────────────────── */
+.job-edit {
+  background: none;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  color: #93c5fd;
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.2s;
+  font-family: inherit;
+}
+.job-edit:hover {
+  background: rgba(59, 130, 246, 0.12);
+}

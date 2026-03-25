@@ -60,6 +60,11 @@ export const translations = {
     delete_confirm: '删除后无法恢复。',
     cancel: '取消',
     delete_confirm_btn: '确认删除',
+    my_jobs_tab: '我的职位',
+    my_jobs: '我的职位',
+    no_my_jobs: '你还没有发布过职位',
+    edit: '编辑',
+    edit_job: '编辑职位',
   },
   en: {
     search_placeholder: 'Search jobs, companies...',
@@ -120,6 +125,11 @@ export const translations = {
     delete_confirm: 'This action cannot be undone.',
     cancel: 'Cancel',
     delete_confirm_btn: 'Confirm Delete',
+    my_jobs_tab: 'My Jobs',
+    my_jobs: 'My Jobs',
+    no_my_jobs: "You haven't posted any jobs yet",
+    edit: 'Edit',
+    edit_job: 'Edit Job',
   },
 };
 

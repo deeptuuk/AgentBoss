@@ -14,12 +14,16 @@ export function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showPublish, setShowPublish] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [view, setView] = useState('all');
+  const [editingJob, setEditingJob] = useState(null);
   // Force re-render when language changes via subscribeToLang
   const [_langVersion, setLangVersion] = useState(0);
   const { jobs, loading, error, reload } = useJobs({ searchQuery });
   const { count: favCount } = useFavorites();
   const { pubkey } = useAuth();
   const { markDeleted } = useDeletedJobs();
+
+  const myJobs = pubkey ? jobs.filter((j) => j.pubkey === pubkey) : [];
 
   // Subscribe to language changes — triggers re-render on switch
   useEffect(() => {
@@ -76,6 +80,26 @@ export function App() {
         onPublish={handlePublishClick}
       />
 
+      {/* View Tabs */}
+      {hasSigner() && (
+        <div style="display: flex; justify-content: center; padding: 12px 0 0;">
+          <div class="navbar-tabs">
+            <button
+              class={`navbar-tab ${view === 'all' ? 'active' : ''}`}
+              onClick={() => setView('all')}
+            >
+              {t('latest_jobs')}
+            </button>
+            <button
+              class={`navbar-tab ${view === 'mine' ? 'active' : ''}`}
+              onClick={() => setView('mine')}
+            >
+              {t('my_jobs_tab')}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Main Content */}
       <main class="main-content">
         <div class="container">
@@ -90,13 +114,54 @@ export function App() {
           <div class="jobs-layout">
             {/* Job Feed */}
             <div>
-              <div class="jobs-section-title">
-                <span>{t('latest_jobs')}</span>
-                <span style="color: var(--text-muted); font-size: 11px">
-                  {loading ? t('loading_jobs') : `${jobs.length} ${t('jobs_count')}`}
-                </span>
-              </div>
-              <JobList jobs={jobs} loading={loading} error={error} onJobClick={() => {}} onRetry={reload} onPublish={handlePublishClick} onDelete={pubkey ? (j) => setDeleteTarget(j) : undefined} />
+              {view === 'mine' ? (
+                <>
+                  <div class="jobs-section-title">
+                    <span>{t('my_jobs_tab')}</span>
+                    <span style="color: var(--text-muted); font-size: 11px">
+                      {loading ? t('loading_jobs') : `${myJobs.length} ${t('jobs_count')}`}
+                    </span>
+                  </div>
+                  <JobList
+                    jobs={myJobs}
+                    loading={loading}
+                    error={error}
+                    onJobClick={() => {}}
+                    onRetry={reload}
+                    onPublish={handlePublishClick}
+                    onDelete={(j) => setDeleteTarget(j)}
+                    onEdit={(j) => setEditingJob(j)}
+                  />
+                  {!loading && myJobs.length === 0 && (
+                    <div class="empty-state">
+                      <div class="empty-state-icon">📝</div>
+                      <h3>{t('no_my_jobs')}</h3>
+                      <button class="btn btn-primary" onClick={handlePublishClick}>
+                        {t('publish_btn')}
+                      </button>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <>
+                  <div class="jobs-section-title">
+                    <span>{t('latest_jobs')}</span>
+                    <span style="color: var(--text-muted); font-size: 11px">
+                      {loading ? t('loading_jobs') : `${jobs.length} ${t('jobs_count')}`}
+                    </span>
+                  </div>
+                  <JobList
+                    jobs={jobs}
+                    loading={loading}
+                    error={error}
+                    onJobClick={() => {}}
+                    onRetry={reload}
+                    onPublish={handlePublishClick}
+                    onDelete={pubkey ? (j) => setDeleteTarget(j) : undefined}
+                    onEdit={pubkey ? (j) => setEditingJob(j) : undefined}
+                  />
+                </>
+              )}
             </div>
 
             {/* Sidebar */}
@@ -113,6 +178,12 @@ export function App() {
                     <div class="stat-value">{favCount}</div>
                     <div class="stat-label">{t('favorites')}</div>
                   </div>
+                  {pubkey && (
+                    <div class="stat-item">
+                      <div class="stat-value">{myJobs.length}</div>
+                      <div class="stat-label">{t('my_jobs')}</div>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -180,6 +251,15 @@ export function App() {
         <PublishForm
           onClose={() => setShowPublish(false)}
           onSuccess={handlePublishSuccess}
+        />
+      )}
+
+      {/* Edit Modal — mutually exclusive with DeleteModal */}
+      {editingJob && !deleteTarget && (
+        <PublishForm
+          jobToEdit={editingJob}
+          onClose={() => setEditingJob(null)}
+          onSuccess={() => { setEditingJob(null); reload(); }}
         />
       )}
 
