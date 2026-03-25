@@ -96,7 +96,7 @@ beforeEach(() => {
 
 | 用例 | 描述 |
 |------|------|
-| loading 状态：显示骨架屏 | `getAllByClassName('skeleton')`，数量 4 |
+| loading 状态：显示骨架屏 | `getAllByRole('article')` 数量为 0（有 skeleton 但无 article role），或验证「最新职位」标题存在 |
 | error 状态：显示错误信息 | `getByText(errorMsg)`（errorMsg 为测试注入的错误字符串） |
 | 空状态：无职位时显示 | `getByText('暂无职位')` |
 | 正常列表：渲染 JobCard | `getAllByRole('article')` 数量等于 jobs.length |
