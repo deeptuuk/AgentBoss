@@ -58,16 +58,16 @@ class RegionMapping:
     cities: dict[str, str]  # code -> name
     province_city: dict[str, list[int]]  # province_code -> [city_codes]
 
-    def province_name_to_code(self, name: str) -> str | None:
+    def province_name_to_code(self, name: str) -> int | None:
         for code, n in self.provinces.items():
             if n == name:
-                return code
+                return int(code)
         return None
 
-    def city_name_to_code(self, name: str) -> str | None:
+    def city_name_to_code(self, name: str) -> int | None:
         for code, n in self.cities.items():
             if n == name:
-                return code
+                return int(code)
         return None
 
 
