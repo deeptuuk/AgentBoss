@@ -1,4 +1,5 @@
 import { useFavorites } from '../hooks/useFavorites.js';
+import { t } from '../lib/i18n.js';
 
 function timeAgo(timestamp) {
   const seconds = Math.floor(Date.now() / 1000) - timestamp;
@@ -30,8 +31,8 @@ export function JobCard({ job, onClick }) {
         <button
           class={`job-favorite ${fav ? 'active' : ''}`}
           onClick={handleFav}
-          title={fav ? '取消收藏' : '收藏'}
-          aria-label={fav ? '取消收藏' : '收藏'}
+          title={fav ? t('unfavorite') : t('favorite')}
+          aria-label={fav ? t('unfavorite') : t('favorite')}
         >
           {fav ? '★' : '☆'}
         </button>

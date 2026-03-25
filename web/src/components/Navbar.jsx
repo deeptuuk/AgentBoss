@@ -1,5 +1,7 @@
 import { useState } from 'preact/hooks';
 import { useAuth } from '../hooks/useAuth.js';
+import { LanguageSwitch } from './LanguageSwitch.jsx';
+import { t } from '../lib/i18n.js';
 
 export function Navbar({ onSearch, onPublish }) {
   const [searchValue, setSearchValue] = useState('');
@@ -23,30 +25,32 @@ export function Navbar({ onSearch, onPublish }) {
           <span class="navbar-search-icon">⌕</span>
           <input
             type="search"
-            placeholder="搜索职位、公司..."
+            placeholder={t('search_placeholder')}
             value={searchValue}
             onInput={handleSearch}
-            aria-label="搜索职位"
+            aria-label={t('search_placeholder')}
           />
         </div>
 
         <div class="navbar-actions">
+          <LanguageSwitch />
+
           {pubkey ? (
             <span class="pubkey-badge" title={pubkey}>
               ⚡ {pubkey.slice(0, 8)}…
             </span>
           ) : hasSigner ? (
             <span class="pubkey-badge" style="color: var(--accent)">
-              签名中...
+              {t('signing')}
             </span>
           ) : (
             <span class="pubkey-badge" style="color: var(--text-muted)">
-              未连接
+              {t('disconnected')}
             </span>
           )}
 
           <button class="btn btn-primary" onClick={onPublish}>
-            + 发布职位
+            {t('publish_btn')}
           </button>
         </div>
       </div>
