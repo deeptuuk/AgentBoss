@@ -341,6 +341,7 @@ def list_jobs(
     favorited: bool = typer.Option(False, "--favorited", is_flag=True, help="Show only favorited jobs"),
     applied: bool = typer.Option(False, "--applied", is_flag=True, help="Show only applied jobs"),
     search: Optional[str] = typer.Option(None, "--search", help="Search keywords (space-separated, AND match)"),
+    federation: Optional[str] = typer.Option(None, "--federation", help="Filter by federation name"),
 ):
     """List locally stored job postings."""
     storage = _get_storage()
@@ -353,12 +354,20 @@ def list_jobs(
     if city:
         city_code_val = resolver.city_code(city)
 
+    if federation:
+        fed = next((f for f in storage.list_federations() if f["name"] == federation), None)
+        if not fed:
+            typer.echo(f"Federation '{federation}' not found. Run: agentboss federation list")
+            storage.close()
+            return
+
     jobs = storage.list_jobs(
         province_code=prov_code,
         city_code=city_code_val,
         favorited=favorited or None,
         applied=applied or None,
         search_query=search,
+        federation_name=federation,
     )
     if not jobs:
         typer.echo("No jobs found.")
