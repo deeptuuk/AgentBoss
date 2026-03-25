@@ -17,13 +17,27 @@ export function createRelayClient() {
   let onEvent = null;
   let onEOSE = null;
   let currentSubId = null;
+  let currentRelayIndex = 0;
 
-  function connect(relayUrl = RELAYS[0]) {
+  function connect(relayUrl = RELAYS[currentRelayIndex]) {
     return new Promise((resolve, reject) => {
-      ws = new WebSocket(relayUrl);
+      if (currentRelayIndex >= RELAYS.length) {
+        reject(new Error('All relays failed'));
+        return;
+      }
+      const url = relayUrl || RELAYS[currentRelayIndex];
+      ws = new WebSocket(url);
 
       ws.onopen = () => resolve();
-      ws.onerror = (e) => reject(new Error(`WebSocket error: ${relayUrl}`));
+      ws.onerror = () => {
+        ws.close();
+        currentRelayIndex++;
+        if (currentRelayIndex < RELAYS.length) {
+          connect().then(resolve).catch(reject);
+        } else {
+          reject(new Error('All relays failed'));
+        }
+      };
 
       ws.onmessage = (msg) => {
         const data = JSON.parse(msg.data);
@@ -72,6 +86,7 @@ export function createRelayClient() {
 
   function close() {
     if (ws) ws.close();
+    currentRelayIndex = 0;
   }
 
   return {
