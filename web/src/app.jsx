@@ -3,9 +3,11 @@ import { Navbar } from './components/Navbar.jsx';
 import { JobList } from './components/JobList.jsx';
 import { PublishForm } from './components/PublishForm.jsx';
 import { DeleteModal } from './components/DeleteModal.jsx';
+import { ToastContainer } from './components/ToastContainer.jsx';
 import { useJobs } from './hooks/useJobs.js';
 import { useFavorites } from './hooks/useFavorites.js';
 import { useDeletedJobs } from './hooks/useDeletedJobs.js';
+import { useToast } from './hooks/useToast.js';
 import { hasSigner, deleteJob } from './lib/nostr.js';
 import { useAuth } from './hooks/useAuth.js';
 import { t, getLang, subscribeToLang } from './lib/i18n.js';
@@ -22,6 +24,7 @@ export function App() {
   const { count: favCount } = useFavorites();
   const { pubkey } = useAuth();
   const { markDeleted } = useDeletedJobs();
+  const { toasts, showToast, dismissToast } = useToast();
 
   const myJobs = pubkey ? jobs.filter((j) => j.pubkey === pubkey) : [];
 
@@ -36,31 +39,32 @@ export function App() {
 
   const handlePublishClick = () => {
     if (!hasSigner()) {
-      alert(t('err_alert_nip07'));
+      showToast(t('toast_nip07_err'), 'error');
       return;
     }
     setShowPublish(true);
   };
 
   const handlePublishSuccess = () => {
-    const toast = document.createElement('div');
-    toast.className = 'toast success';
-    toast.textContent = t('success');
-    document.body.appendChild(toast);
-    setTimeout(() => {
-      setShowPublish(false);
-      toast.remove();
-    }, 2500);
+    showToast(t('toast_published'), 'success');
+    setTimeout(() => setShowPublish(false), 2500);
   };
 
   const handleDeleteConfirm = async (job) => {
     try {
       await deleteJob(job.d_tag, pubkey);
+      showToast(t('toast_deleted'), 'success');
     } catch {
-      // deletion failed silently
+      showToast(t('toast_delete_err'), 'error');
     }
     markDeleted(job.d_tag);
     setDeleteTarget(null);
+  };
+
+  const handleEditSuccess = () => {
+    showToast(t('toast_edited'), 'success');
+    setEditingJob(null);
+    reload();
   };
 
   return (
@@ -259,7 +263,7 @@ export function App() {
         <PublishForm
           jobToEdit={editingJob}
           onClose={() => setEditingJob(null)}
-          onSuccess={() => { setEditingJob(null); reload(); }}
+          onSuccess={handleEditSuccess}
         />
       )}
 
@@ -271,6 +275,9 @@ export function App() {
           onClose={() => setDeleteTarget(null)}
         />
       )}
+
+      {/* Toast Container */}
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 }
