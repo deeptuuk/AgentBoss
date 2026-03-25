@@ -182,6 +182,22 @@ def publish(
                 for f in failed:
                     typer.echo(f"  - {f}")
             else:
+                # Extract d_tag from event tags
+                d_tag = ""
+                for tag in event.get("tags", []):
+                    if tag[0] == "d":
+                        d_tag = tag[1]
+                        break
+                storage.upsert_job(
+                    event_id=event["id"],
+                    d_tag=d_tag,
+                    pubkey=event["pubkey"],
+                    province_code=prov_code,
+                    city_code=city_code,
+                    content=event["content"],
+                    created_at=event["created_at"],
+                    federation_id=fed["federation_id"],
+                )
                 typer.echo(f"Published to all {len(relay_urls)} federation relays.")
             return
 

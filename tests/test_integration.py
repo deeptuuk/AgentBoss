@@ -121,6 +121,67 @@ class TestStorageWorkflow:
         storage.close()
 
 
+class TestFederationPublishWorkflow:
+    def test_publish_to_federation_persists_federation_id(self, cli_home):
+        """publish --federation writes federation_id to local storage."""
+        from cli.main import app
+        from cli.nostr_client import NostrRelay
+        from cli.storage import Storage
+
+        db_path = str(cli_home / "agentboss.db")
+
+        # Create a fresh storage for the mock to use (separate from test's db_read)
+        db = Storage(db_path)
+        db.init_db()
+        db.upsert_region(1, "beijing", "province")
+        db.upsert_region(101, "beijing", "city", parent_code=1)
+        db.upsert_federation(
+            federation_id="fed_pub_test",
+            name="testfed",
+            relay_urls=["wss://fake.example.com"],
+        )
+
+        # Mock identity and NostrRelay
+        import unittest.mock as mock
+        mock_publish = mock.AsyncMock(return_value={"event_id": "fake-id", "accepted": True, "message": "ok"})
+        mock_connect = mock.AsyncMock()
+        mock_close = mock.AsyncMock()
+
+        def make_storage():
+            s = Storage(db_path)
+            s.init_db()
+            s.upsert_region(1, "beijing", "province")
+            s.upsert_region(101, "beijing", "city", parent_code=1)
+            s.upsert_federation(federation_id="fed_pub_test", name="testfed",
+                                relay_urls=["wss://fake.example.com"])
+            return s
+
+        with mock.patch("cli.main._load_identity", return_value={
+            "privkey": "a" * 64,
+            "pubkey": "b" * 64,
+            "npub": "npub1test",
+        }), mock.patch("cli.main._get_storage", side_effect=make_storage), \
+             mock.patch.object(NostrRelay, "connect", mock_connect), \
+             mock.patch.object(NostrRelay, "close", mock_close), \
+             mock.patch.object(NostrRelay, "publish_event", mock_publish):
+            result = runner.invoke(app, ["publish",
+                "--province", "beijing",
+                "--city", "beijing",
+                "--title", "Engineer",
+                "--company", "Corp",
+                "--federation", "testfed",
+            ])
+            assert result.exit_code == 0, f"Exit code: {result.exit_code}, output: {result.output}"
+
+        # Verify federation_id was written (fresh connection; db was closed by publish)
+        db2 = Storage(db_path)
+        db2.init_db()
+        jobs = db2.list_jobs()
+        assert len(jobs) >= 1
+        assert jobs[0]["federation_id"] == "fed_pub_test"
+        db2.close()
+
+
 class TestWebRegistrationWorkflow:
     def test_register_and_login(self, tmp_path, monkeypatch):
         monkeypatch.setenv("AGENTBOSS_WEB_DB", str(tmp_path / "users.db"))
