@@ -1,90 +1,94 @@
+> This is a self-evolving code experiment, driven by issues in terms of evolution direction. Anyone can submit issues.
+
+[中文版](README_zh.md)
+
 # AgentBoss
 
-基于 Nostr 的去中心化招聘平台。
+A decentralized recruitment platform based on Nostr.
 
-## 功能
+## Features
 
-### 核心功能
-- 发布职位 (NIP-04 加密 DM + kind:31970 事件)
-- 搜索/过滤职位
-- 申请职位 (kind:31970 申请事件)
-- 雇主回复申请
+### Core Features
+- Post jobs (NIP-04 encrypted DM + kind:31970 events)
+- Search/filter jobs
+- Apply for jobs (kind:31970 application events)
+- Employer replies to applications
 
 ### Relay Federation
-职位发布可以跨越多个 Nostr relay，扩展职位覆盖范围。
+Job postings can span multiple Nostr relays to extend job coverage.
 
-#### Federation 命令
+#### Federation Commands
 ```bash
-# 创建 Federation
-agentboss federation create <名称> <relay1> [relay2...]
+# Create a Federation
+agentboss federation create <name> <relay1> [relay2...]
 
-# 加入 Federation
-agentboss federation join federation:<npub_hex>:<名称>
+# Join a Federation
+agentboss federation join federation:<npub_hex>:<name>
 
-# 列出已加入的 Federation
+# List joined Federations
 agentboss federation list
 
-# 退出 Federation
+# Leave a Federation
 agentboss federation leave <federation_id>
 ```
 
-#### 多 Relay 操作
+#### Multi-Relay Operations
 ```bash
-# 从 Federation 获取职位
-agentboss fetch --federation <名称>
+# Fetch jobs from Federation
+agentboss fetch --federation <name>
 
-# 发布职位到 Federation
-agentboss publish --federation <名称> --province <省> --city <城市> --title <标题> --company <公司>
+# Publish job to Federation
+agentboss publish --federation <name> --province <province> --city <city> --title <title> --company <company>
 ```
 
-## 安装
+## Installation
 ```bash
-# 使用 uv 创建虚拟环境
+# Create virtual environment with uv
 uv venv .env --python 3.12
 source .env/bin/activate  # Linux/Mac
 # .env\Scripts\activate   # Windows
 
-# 安装 pip 和项目
+# Install pip and project
 uv pip install pip
 
-# 方式一：pip 安装
+# Option 1: pip install
 pip install -e .
 
-# 方式二：uv lock 管理依赖
+# Option 2: uv lock for dependency management
 uv lock
 uv sync
 ```
 
-## 运行环境
-使用 `uv` 管理虚拟环境确保一致性：
+## Runtime Environment
+Use `uv` to manage virtual environments for consistency:
 ```bash
-# 激活环境（每次操作前）
+# Activate environment (before each operation)
 source .env/bin/activate
 
-# 运行测试
+# Run tests
 pytest tests/ -v
 
-# 运行 CLI
-agentboss <命令>
+# Run CLI
+agentboss <command>
 ```
 
-## 快速开始
+## Quick Start
 ```bash
-# 1. 登录
+# 1. Login
 agentboss login --key <nsec>
 
-# 2. 创建 Federation
+# 2. Create a Federation
 agentboss federation create techjobs wss://relay1.example.com wss://relay2.example.com
 
-# 3. 发布职位
-agentboss publish --province 北京 --city 北京市 --title "高级工程师" --company "科技公司"
+# 3. Post a job
+agentboss publish --province beijing --city beijing --title "Senior Engineer" --company "Tech Corp"
 
-# 4. 获取职位
+# 4. Fetch jobs
 agentboss fetch
 agentboss list
 ```
 
-## 职位事件 (kind:31970)
+## Job Event (kind:31970)
 ```json
 {
   "content": "{\"title\":\"...\",\"company\":\"...\",\"salary_range\":\"...\",\"description\":\"...\"}",
@@ -98,12 +102,12 @@ agentboss list
 }
 ```
 
-## Federation 邀请码格式
+## Federation Invite Code Format
 ```
-federation:<npub_hex>:<名称>
+federation:<npub_hex>:<name>
 ```
 
-Federation 事件 (kind:31990)：
+Federation event (kind:31990):
 ```json
 {
   "content": "[\"wss://relay1.example.com\", \"wss://relay2.example.com\"]",
