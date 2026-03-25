@@ -1,10 +1,8 @@
-# AgentBoss Vercel 部署实施计划
+# AgentBoss Vercel 全量部署 — 实施计划
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** 修改 `web/vite.config.js` 支持环境变量驱动的 base path，创建 `web/vercel.json` 配置 Vercel 构建。
-
-**Architecture:** Vite 通过 `VITE_BASE_PATH` 环境变量切换输出目录：Vercel（`base: '/'`, `outDir: 'dist'`）vs GitHub Pages（`base: '/AgentBoss/'`, `outDir: '../docs'`）。
+**Goal:** 修改 Vite 配置支持多平台部署，创建 vercel.json，将 docsify 文档打包进 Vercel 构建输出。
 
 ---
 
@@ -13,81 +11,79 @@
 **Files:**
 - Modify: `web/vite.config.js`
 
-- [ ] **Step 1: 读取当前 vite.config.js**
-
-当前 `web/vite.config.js` 内容（PR #21 合并后）：
-```javascript
-import { defineConfig } from 'vite';
-import preact from '@preact/preset-vite';
-import { resolve } from 'path';
-
-export default defineConfig({
-  plugins: [preact()],
-  // Deploy to /AgentBoss/ subdirectory on GitHub Pages
-  base: '/AgentBoss/',
-  build: {
-    outDir: resolve(__dirname, '../docs'),
-  },
-  server: {
-    port: 3000,
-    open: true,
-  },
-});
-```
-
-- [ ] **Step 2: 写入更新后的 vite.config.js**
+- [ ] **Step 1: 写入更新后的 vite.config.js**
 
 ```javascript
 import { defineConfig } from 'vite';
 import preact from '@preact/preset-vite';
-import { resolve } from 'path';
+import { resolve, join } from 'path';
+import { copyFileSync, mkdirSync, readdirSync, statSync } from 'fs';
 
 const isVercel = process.env.VITE_BASE_PATH === '/';
 
+function copyDir(src, dest) {
+  mkdirSync(dest, { recursive: true });
+  for (const entry of readdirSync(src)) {
+    const srcPath = join(src, entry);
+    const destPath = join(dest, entry);
+    statSync(srcPath).isDirectory()
+      ? copyDir(srcPath, destPath)
+      : copyFileSync(srcPath, destPath);
+  }
+}
+
+function docsifyCopyPlugin() {
+  return {
+    name: 'docsify-copy',
+    closeBundle() {
+      const src = resolve(__dirname, '../docs/superpowers');
+      const dest = resolve(__dirname, 'dist/superpowers');
+      copyDir(src, dest);
+      console.log('[docsify-copy] copied to dist/superpowers/');
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [preact()],
-  // base path: Vercel='/', GitHub Pages='/AgentBoss/'
+  plugins: [preact(), docsifyCopyPlugin()],
   base: process.env.VITE_BASE_PATH || '/',
   build: {
-    // outDir: Vercel uses 'dist/', GitHub Pages uses '../docs'
     outDir: isVercel ? 'dist' : resolve(__dirname, '../docs'),
     emptyOutDir: true,
   },
-  server: {
-    port: 3000,
-    open: true,
-  },
+  server: { port: 3000, open: true },
 });
 ```
 
-- [ ] **Step 3: 本地验证构建（Vercel 模式）**
+- [ ] **Step 2: 本地验证构建（Vercel 模式）**
 
 ```bash
 cd /home/deeptuuk/Code4/AgentBoss/web
 VITE_BASE_PATH=/ npm run build
-# 预期：dist/ 目录生成 index.html + assets/
 ls dist/
+ls dist/superpowers/
+# 预期：dist/index.html + dist/assets/ + dist/superpowers/index.html
 ```
 
-- [ ] **Step 4: 本地验证构建（GitHub Pages 模式）**
+- [ ] **Step 3: 验证 docsify 文档结构**
 
 ```bash
-VITE_BASE_PATH=/AgentBoss/ npm run build
-# 预期：../docs/ 目录生成 index.html + assets/
-ls ../docs/
+ls dist/superpowers/
+# 预期：index.html, _sidebar.md, specs/
 ```
 
-- [ ] **Step 5: 提交**
+- [ ] **Step 4: 提交**
 
 ```bash
 cd /home/deeptuuk/Code4/AgentBoss
 git add web/vite.config.js
 git commit -m "$(cat <<'EOF'
-feat(web): env-driven base path for multi-platform deployment
+feat(web): env-driven multi-platform Vite config with docsify bundling
 
-VITE_BASE_PATH=/ -> Vercel (dist/, base=/)
-VITE_BASE_PATH=/AgentBoss/ -> GitHub Pages (../docs/, base=/AgentBoss/)
-emptyOutDir: true added.
+- VITE_BASE_PATH=/ -> Vercel (dist/, base /)
+- VITE_BASE_PATH=/AgentBoss/ -> GitHub Pages (../docs/, base /AgentBoss/)
+- docsifyCopyPlugin() copies docs/superpowers/ to dist/superpowers/ post-build
+- emptyOutDir: true
 
 Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
 EOF
@@ -117,9 +113,8 @@ EOF
 ```bash
 git add web/vercel.json
 git commit -m "$(cat <<'EOF'
-feat(web): add Vercel deployment config
+feat(web): add Vercel deployment configuration
 
-vercel.json configures:
 - Build: npm install && npm run build
 - Output: dist/
 - Framework: vite
@@ -137,30 +132,37 @@ EOF
 git push
 gh pr create \
   --repo nicholasyangyang/AgentBoss \
-  --title "feat(web): Vercel deployment — env-driven base path + vercel.json" \
+  --title "feat(web): Vercel deployment — env-driven config + docsify bundling" \
   --body "$(cat <<'EOF'
 ## Summary
 
-Enable Vercel deployment via env-driven Vite config and vercel.json.
+Enable full Vercel deployment: Preact frontend + docsify docs, all served from `dist/`.
 
 ## Changes
 
-- `web/vite.config.js`: `base` and `outDir` now driven by `VITE_BASE_PATH` env var
-  - `VITE_BASE_PATH=/` → Vercel (`dist/`, base `/`)
-  - `VITE_BASE_PATH=/AgentBoss/` → GitHub Pages (`../docs/`, base `/AgentBoss/`)
-- `web/vercel.json`: Vercel build configuration
+- `web/vite.config.js`:
+  - `docsifyCopyPlugin()` copies `docs/superpowers/` → `dist/superpowers/` after build
+  - `base` and `outDir` driven by `VITE_BASE_PATH` env var
+  - `emptyOutDir: true`
+- `web/vercel.json`: Vercel build + output config
+
+## URLs After Deploy
+
+- Frontend: `*.vercel.app/`
+- Docs: `*.vercel.app/superpowers/`
 
 ## Vercel Setup
 
 1. Import `nicholasyangyang/AgentBoss` on vercel.com
-2. Set Root Directory to `web/`
-3. Add Environment Variable: `VITE_BASE_PATH` = `/`
+2. Root Directory: `web/`
+3. Environment Variable: `VITE_BASE_PATH` = `/`
 4. Deploy
 
 ## Verification
 
-- [x] `VITE_BASE_PATH=/ npm run build` → `dist/` output
-- [x] `VITE_BASE_PATH=/AgentBoss/ npm run build` → `../docs/` output
+- [x] `VITE_BASE_PATH=/ npm run build` succeeds
+- [x] `dist/index.html` exists (frontend)
+- [x] `dist/superpowers/index.html` exists (docsify)
 
 Closes #20.
 EOF
@@ -171,6 +173,6 @@ EOF
 
 ## 注意事项
 
-- Vercel Dashboard 需要手动设置环境变量 `VITE_BASE_PATH=/`
-- 推送前 deeptuuk 先 `git pull` 同步最新代码
-- `emptyOutDir: true` 会清空目标目录，GitHub Pages 场景需注意
+- `docs/superpowers/` 已在 git 中，无需额外文件
+- docsify `relativePath: true` 自动适配 base path，无需修改
+- GitHub Pages 保留作为备用，不影响本次部署
