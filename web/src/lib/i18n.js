@@ -65,6 +65,11 @@ export const translations = {
     no_my_jobs: '你还没有发布过职位',
     edit: '编辑',
     edit_job: '编辑职位',
+    toast_published: '✓ 职位已发布到 Nostr！',
+    toast_deleted: '✓ 职位已删除',
+    toast_edited: '✓ 职位已更新',
+    toast_delete_err: '✗ 删除失败，请重试',
+    toast_nip07_err: '请先安装 NIP-07 扩展来使用此功能',
   },
   en: {
     search_placeholder: 'Search jobs, companies...',
@@ -130,6 +135,11 @@ export const translations = {
     no_my_jobs: "You haven't posted any jobs yet",
     edit: 'Edit',
     edit_job: 'Edit Job',
+    toast_published: '✓ Job posted to Nostr!',
+    toast_deleted: '✓ Job deleted',
+    toast_edited: '✓ Job updated',
+    toast_delete_err: '✗ Failed to delete, please try again',
+    toast_nip07_err: 'Please install a NIP-07 extension to use this feature',
   },
 };
 
