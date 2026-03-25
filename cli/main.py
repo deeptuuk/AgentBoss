@@ -281,6 +281,7 @@ def fetch(
                         city_code=ccode,
                         content=event["content"],
                         created_at=event["created_at"],
+                        federation_id=fed["federation_id"],
                     )
                     count += 1
             max_jobs = int(storage.get_config("max-jobs", str(DEFAULT_MAX_JOBS)))

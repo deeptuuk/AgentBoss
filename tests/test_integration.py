@@ -181,6 +181,59 @@ class TestFederationPublishWorkflow:
         assert jobs[0]["federation_id"] == "fed_pub_test"
         db2.close()
 
+    def test_fetch_from_federation_persists_federation_id(self, cli_home):
+        """fetch --federation writes federation_id to local storage."""
+        from cli.main import app
+        from cli.storage import Storage
+        import cli.main
+
+        db_path = str(cli_home / "agentboss.db")
+        db = Storage(db_path)
+        db.init_db()
+        db.upsert_region(110000, "beijing", "province")
+        db.upsert_region(110100, "beijing", "city", parent_code=110000)
+        db.upsert_federation(
+            federation_id="fed_fetch_test",
+            name="fetchfed",
+            relay_urls=["wss://fake.example.com"],
+        )
+
+        def make_storage():
+            s = Storage(db_path)
+            s.init_db()
+            s.upsert_region(110000, "beijing", "province")
+            s.upsert_region(110100, "beijing", "city", parent_code=110000)
+            s.upsert_federation(
+                federation_id="fed_fetch_test",
+                name="fetchfed",
+                relay_urls=["wss://fake.example.com"],
+            )
+            return s
+
+        async def mock_fetch_from_relays(relay_urls, kinds, tags, limit):
+            return [{
+                "id": "evt_fetch_1",
+                "pubkey": "pk1",
+                "created_at": 1000,
+                "kind": 30078,
+                "tags": [["d", "dtag1"], ["t", "agentboss"], ["t", "job"], ["province", "110000"]],
+                "content": '{"title":"SRE","company":"Co","version":1}',
+            }]
+
+        import unittest.mock as mock
+        with mock.patch("cli.main._get_storage", side_effect=make_storage), \
+             mock.patch.object(cli.main, "fetch_events_from_relays", mock_fetch_from_relays):
+            result = runner.invoke(app, ["fetch", "--federation", "fetchfed", "--limit", "10"])
+            assert result.exit_code == 0, f"CLI failed: {result.output}"
+
+        # Verify federation_id was written
+        db2 = Storage(db_path)
+        db2.init_db()
+        jobs = db2.list_jobs()
+        assert len(jobs) >= 1
+        assert jobs[0]["federation_id"] == "fed_fetch_test"
+        db2.close()
+
 
 class TestWebRegistrationWorkflow:
     def test_register_and_login(self, tmp_path, monkeypatch):
