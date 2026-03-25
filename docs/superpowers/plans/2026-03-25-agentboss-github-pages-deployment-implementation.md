@@ -50,7 +50,7 @@ export default defineConfig({
 - [ ] **Step 2: 运行构建验证**
 
 ```bash
-cd /home/deeptuuk/Code3/AgentBoss/web
+cd /home/deeptuuk/Code4/AgentBoss/web
 npm install
 npm run build
 ```
@@ -68,7 +68,7 @@ ls /home/deeptuuk/Code3/AgentBoss/docs/assets/
 - [ ] **Step 3: 提交**
 
 ```bash
-cd /home/deeptuuk/Code3/AgentBoss
+cd /home/deeptuuk/Code4/AgentBoss
 git add web/vite.config.js
 git commit -m "$(cat <<'EOF'
 feat(web): output build to docs/ for GitHub Pages deployment
