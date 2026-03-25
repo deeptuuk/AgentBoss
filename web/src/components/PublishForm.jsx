@@ -1,17 +1,20 @@
 import { useState } from 'preact/hooks';
-import { signEvent } from '../lib/nostr.js';
+import { signEvent, deleteJob } from '../lib/nostr.js';
 import { createRelayClient, generateDTag } from '../lib/relay.js';
+import { useDeletedJobs } from '../hooks/useDeletedJobs.js';
 import { t } from '../lib/i18n.js';
 
-export function PublishForm({ onClose, onSuccess }) {
+export function PublishForm({ jobToEdit, onClose, onSuccess }) {
+  const isEditing = !!jobToEdit;
+  const { markDeleted } = useDeletedJobs();
   const [form, setForm] = useState({
-    title: '',
-    company: '',
-    salary: '',
-    province: '',
-    city: '',
-    description: '',
-    contact: '',
+    title: jobToEdit?.title || '',
+    company: jobToEdit?.company || '',
+    salary: jobToEdit?.salary || '',
+    province: jobToEdit?.province || '',
+    city: jobToEdit?.city || '',
+    description: jobToEdit?.description || '',
+    contact: jobToEdit?.contact || '',
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
@@ -32,6 +35,11 @@ export function PublishForm({ onClose, onSuccess }) {
     setSubmitting(true);
 
     try {
+      if (isEditing) {
+        await deleteJob(jobToEdit.d_tag, jobToEdit.pubkey);
+        markDeleted(jobToEdit.d_tag);
+      }
+
       const dTag = generateDTag();
       const event = {
         kind: 30078,
@@ -75,7 +83,7 @@ export function PublishForm({ onClose, onSuccess }) {
     <div class="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose && onClose()}>
       <div class="modal" role="dialog" aria-modal="true" aria-labelledby="publish-title">
         <div class="modal-header">
-          <h2 class="modal-title" id="publish-title">{t('form_title')}</h2>
+          <h2 class="modal-title" id="publish-title">{isEditing ? t('edit_job') : t('form_title')}</h2>
           <button class="modal-close" onClick={onClose} aria-label="Close">×</button>
         </div>
 

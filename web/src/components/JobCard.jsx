@@ -15,7 +15,7 @@ function shortPubkey(hex, len = 6) {
   return `${hex.slice(0, len)}…`;
 }
 
-export function JobCard({ job, onClick, onDelete }) {
+export function JobCard({ job, onClick, onDelete, onEdit }) {
   const { isFavorite, toggleFavorite } = useFavorites();
   const fav = isFavorite(job.id);
 
@@ -37,6 +37,16 @@ export function JobCard({ job, onClick, onDelete }) {
           >
             {fav ? '★' : '☆'}
           </button>
+          {onEdit && (
+            <button
+              class="job-edit"
+              onClick={(e) => { e.stopPropagation(); onEdit(job); }}
+              title={t('edit')}
+              aria-label={t('edit')}
+            >
+              {t('edit')}
+            </button>
+          )}
           {onDelete && (
             <button
               class="job-delete"
