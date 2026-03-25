@@ -1,4 +1,4 @@
-import { useState } from 'preact/hooks';
+import { useState, useRef } from 'preact/hooks';
 import { useAuth } from '../hooks/useAuth.js';
 import { LanguageSwitch } from './LanguageSwitch.jsx';
 import { hexToNpub } from '../lib/nostr.js';
@@ -7,11 +7,17 @@ import { t } from '../lib/i18n.js';
 export function Navbar({ onSearch, onPublish }) {
   const [searchValue, setSearchValue] = useState('');
   const { pubkey, hasSigner } = useAuth();
+  const debounceRef = useRef(null);
 
   const handleSearch = (e) => {
     setSearchValue(e.target.value);
-    if (onSearch) onSearch(e.target.value);
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      if (onSearch) onSearch(e.target.value);
+    }, 500);
   };
+
+  const npub = pubkey ? hexToNpub(pubkey) : null;
 
   return (
     <nav class="navbar">
@@ -37,8 +43,8 @@ export function Navbar({ onSearch, onPublish }) {
           <LanguageSwitch />
 
           {pubkey ? (
-            <span class="pubkey-badge" title={hexToNpub(pubkey)}>
-              ⚡ {hexToNpub(pubkey).slice(0, 12)}…
+            <span class="pubkey-badge" title={npub}>
+              ⚡ {npub.slice(0, 12)}…
             </span>
           ) : hasSigner ? (
             <span class="pubkey-badge" style="color: var(--accent)">
