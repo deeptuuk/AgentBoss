@@ -3,13 +3,14 @@
 import json
 import os
 import asyncio
+import time
 from pathlib import Path
 from typing import Optional
 
 import typer
 
 from shared.constants import (
-    APP_TAG, JOB_TAG, REGION_TAG, KIND_APP_DATA,
+    APP_TAG, JOB_TAG, REGION_TAG, KIND_APP_DATA, KIND_FEDERATION,
     REGION_MAP_D_TAG, DEFAULT_RELAY, DEFAULT_MAX_JOBS, JOB_CONTENT_VERSION,
 )
 from shared.crypto import gen_keys, derive_pub, to_npub, nsec_to_hex, to_nsec
@@ -17,17 +18,19 @@ from shared.event import build_event
 from cli.storage import Storage
 from cli.regions import RegionResolver
 from cli.models import parse_job_content
-from cli.nostr_client import NostrRelay
+from cli.nostr_client import NostrRelay, fetch_events_from_relays
 
 app = typer.Typer(help="AgentBoss: Decentralized Job Recruitment CLI")
 regions_app = typer.Typer(help="Region mapping management")
 config_app = typer.Typer(help="Configuration management")
 profile_app = typer.Typer(help="User profile management")
 applications_app = typer.Typer(help="Manage job applications")
+federation_app = typer.Typer(help="Federation management")
 app.add_typer(regions_app, name="regions")
 app.add_typer(config_app, name="config")
 app.add_typer(profile_app, name="profile")
 app.add_typer(applications_app, name="applications")
+app.add_typer(federation_app, name="federation")
 
 
 def _home() -> Path:
@@ -107,6 +110,7 @@ def publish(
     salary: str = typer.Option("", "--salary"),
     description: str = typer.Option("", "--description"),
     contact: str = typer.Option("", "--contact"),
+    federation: Optional[str] = typer.Option(None, "--federation", help="Publish to a federation by name"),
 ):
     """Publish a job posting to the Nostr network."""
     identity = _load_identity()
@@ -153,9 +157,36 @@ def publish(
         tags=tags,
     )
 
-    relay_url = storage.get_config("relay", DEFAULT_RELAY)
-
     async def _publish():
+        if federation:
+            # Multi-relay publish to federation
+            fed = next((f for f in storage.list_federations() if f["name"] == federation), None)
+            if not fed:
+                typer.echo(f"Federation '{federation}' not found. Run: agentboss federation list")
+                raise typer.Exit(code=1)
+            relay_urls = fed["relay_urls"]
+            failed = []
+            for relay_url in relay_urls:
+                relay = NostrRelay(relay_url)
+                try:
+                    await relay.connect()
+                    result = await relay.publish_event(event)
+                    if not result["accepted"]:
+                        failed.append(f"{relay_url}: {result['message']}")
+                except Exception as e:
+                    failed.append(f"{relay_url}: {e}")
+                finally:
+                    await relay.close()
+            if failed:
+                typer.echo(f"Published to {len(relay_urls) - len(failed)}/{len(relay_urls)} federation relays. Failures:")
+                for f in failed:
+                    typer.echo(f"  - {f}")
+            else:
+                typer.echo(f"Published to all {len(relay_urls)} federation relays.")
+            return
+
+        # Single relay publish (existing behavior)
+        relay_url = storage.get_config("relay", DEFAULT_RELAY)
         relay = NostrRelay(relay_url)
         try:
             await relay.connect()
@@ -178,11 +209,11 @@ def fetch(
     province: Optional[str] = typer.Option(None, "--province"),
     city: Optional[str] = typer.Option(None, "--city"),
     limit: int = typer.Option(DEFAULT_MAX_JOBS, "--limit"),
+    federation: Optional[str] = typer.Option(None, "--federation", help="Fetch from a federation by name"),
 ):
     """Fetch job postings from Relay and store locally."""
     storage = _get_storage()
     resolver = RegionResolver(storage)
-    relay_url = storage.get_config("relay", DEFAULT_RELAY)
 
     tags = {"#t": [APP_TAG, JOB_TAG]}
     if province:
@@ -199,6 +230,50 @@ def fetch(
         tags["#city"] = [str(city_code)]
 
     async def _fetch():
+        if federation:
+            # Multi-relay fetch from federation
+            fed = next((f for f in storage.list_federations() if f["name"] == federation), None)
+            if not fed:
+                typer.echo(f"Federation '{federation}' not found. Run: agentboss federation list")
+                raise typer.Exit(code=1)
+            relay_urls = fed["relay_urls"]
+            events = await fetch_events_from_relays(
+                relay_urls=relay_urls,
+                kinds=[KIND_APP_DATA],
+                tags=tags,
+                limit=limit,
+            )
+            count = 0
+            for event in events:
+                pcode = ccode = 0
+                for tag in event.get("tags", []):
+                    if tag[0] == "province":
+                        pcode = int(tag[1])
+                    elif tag[0] == "city":
+                        ccode = int(tag[1])
+                d_tag = ""
+                for tag in event.get("tags", []):
+                    if tag[0] == "d":
+                        d_tag = tag[1]
+                has_job_tag = any(t[0] == "t" and t[1] == JOB_TAG for t in event.get("tags", []))
+                if has_job_tag and d_tag:
+                    storage.upsert_job(
+                        event_id=event["id"],
+                        d_tag=d_tag,
+                        pubkey=event["pubkey"],
+                        province_code=pcode,
+                        city_code=ccode,
+                        content=event["content"],
+                        created_at=event["created_at"],
+                    )
+                    count += 1
+            max_jobs = int(storage.get_config("max-jobs", str(DEFAULT_MAX_JOBS)))
+            storage.evict_oldest(max_jobs)
+            typer.echo(f"Fetched {count} jobs from federation '{federation}'. Total stored: {storage.count_jobs()}")
+            return
+
+        # Single relay fetch (existing behavior)
+        relay_url = storage.get_config("relay", DEFAULT_RELAY)
         relay = NostrRelay(relay_url)
         count = 0
         try:
@@ -924,4 +999,202 @@ def applications_respond(
             await relay.close()
 
     asyncio.run(_respond())
+    storage.close()
+
+
+# ── Federations ────────────────────────────────────────────────
+
+@federation_app.command(name="join")
+def federation_join(
+    invite_code: str = typer.Argument(..., help="Federation invite code (federation:npub:name)"),
+):
+    """Join a federation by invite code.
+
+    Fetches the relay list from the federation owner's npub and stores locally.
+    """
+    identity = _load_identity()
+    if not identity:
+        typer.echo("No identity. Run: agentboss login --key <nsec>")
+        raise typer.Exit(code=1)
+
+    # Parse invite code: federation:<npub_hex>:<name>
+    if not invite_code.startswith("federation:"):
+        typer.echo("Invalid invite code format. Must start with 'federation:'")
+        raise typer.Exit(code=1)
+
+    parts = invite_code.split(":", 2)
+    if len(parts) != 3:
+        typer.echo("Invalid invite code format. Use: federation:<npub_hex>:<name>")
+        raise typer.Exit(code=1)
+    _, federation_id, federation_name = parts
+
+    # Validate npub hex (64 chars)
+    if len(federation_id) != 64 or not all(c in "0123456789abcdef" for c in federation_id.lower()):
+        typer.echo("Invalid federation npub. Must be 64 hex characters.")
+        raise typer.Exit(code=1)
+
+    storage = _get_storage()
+    relay_url = storage.get_config("relay", DEFAULT_RELAY)
+
+    async def _fetch_federation():
+        relay = NostrRelay(relay_url)
+        try:
+            await relay.connect()
+            await relay.subscribe(
+                "fed_lookup",
+                kinds=[KIND_FEDERATION],
+                tags={"authors": [federation_id], "#d": [federation_name]},
+            )
+            events = []
+            async for event in relay.receive_events("fed_lookup"):
+                events.append(event)
+            await relay.unsubscribe("fed_lookup")
+
+            if not events:
+                typer.echo(f"Federation '{federation_name}' not found for npub {federation_id[:16]}...")
+                return
+
+            latest = max(events, key=lambda e: e.get("created_at", 0))
+            try:
+                relay_urls = json.loads(latest["content"])
+            except (json.JSONDecodeError, KeyError):
+                typer.echo("Error: Invalid federation relay list in event content")
+                return
+
+            if not isinstance(relay_urls, list) or not all(isinstance(r, str) for r in relay_urls):
+                typer.echo("Error: Federation relay list must be a JSON array of relay URLs")
+                return
+
+            storage.upsert_federation(
+                federation_id=federation_id,
+                name=federation_name,
+                relay_urls=relay_urls,
+                created_at=latest.get("created_at", int(time.time())),
+            )
+            typer.echo(f"Joined federation '{federation_name}' with {len(relay_urls)} relay(s)")
+        finally:
+            await relay.close()
+
+    asyncio.run(_fetch_federation())
+    storage.close()
+
+
+@federation_app.command(name="list")
+def federation_list():
+    """List all joined federations."""
+    identity = _load_identity()
+    if not identity:
+        typer.echo("No identity. Run: agentboss login --key <nsec>")
+        raise typer.Exit(code=1)
+
+    storage = _get_storage()
+    feds = storage.list_federations()
+    if not feds:
+        typer.echo("No federations joined. Run: agentboss federation join <code>")
+        storage.close()
+        return
+
+    for fed in feds:
+        relay_count = len(fed["relay_urls"])
+        typer.echo(f"- {fed['name']} ({fed['federation_id'][:16]}...) | {relay_count} relay(s)")
+    storage.close()
+
+
+@federation_app.command(name="leave")
+def federation_leave(
+    federation_id: str = typer.Argument(..., help="Federation ID (npub hex)"),
+    confirm: bool = typer.Option(False, "--yes", help="Skip confirmation"),
+):
+    """Leave and delete a federation."""
+    identity = _load_identity()
+    if not identity:
+        typer.echo("No identity. Run: agentboss login --key <nsec>")
+        raise typer.Exit(code=1)
+
+    storage = _get_storage()
+    fed = storage.get_federation(federation_id)
+    if not fed:
+        typer.echo("Federation not found.")
+        storage.close()
+        raise typer.Exit(code=1)
+
+    if not confirm:
+        typer.echo(f"Leave federation '{fed['name']}'? Use --yes to confirm.")
+        storage.close()
+        raise typer.Exit(code=1)
+
+    storage.delete_federation(federation_id)
+    typer.echo(f"Left federation '{fed['name']}'.")
+    storage.close()
+
+
+@federation_app.command(name="create")
+def federation_create(
+    name: str = typer.Argument(..., help="Federation name"),
+    relays: list[str] = typer.Argument(..., help="Relay URLs (at least one)"),
+):
+    """Create a new federation and publish its metadata.
+
+    Publishes a federation metadata event (kind:31990) to all specified relays.
+    The resulting invite code can be shared with others to join this federation.
+    """
+    identity = _load_identity()
+    if not identity:
+        typer.echo("No identity. Run: agentboss login --key <nsec>")
+        raise typer.Exit(code=1)
+
+    if len(relays) < 1:
+        typer.echo("At least one relay URL is required.")
+        raise typer.Exit(code=1)
+
+    storage = _get_storage()
+    federation_id = identity["pubkey"]
+    relay_urls = relays
+
+    content = json.dumps(relay_urls)
+    event = build_event(
+        kind=KIND_FEDERATION,
+        content=content,
+        privkey=identity["privkey"],
+        pubkey=identity["pubkey"],
+        tags=[
+            ["d", name],
+            ["t", "agentboss"],
+            ["t", "federation"],
+        ],
+    )
+
+    async def _create():
+        failed = []
+        for relay_url in relay_urls:
+            relay = NostrRelay(relay_url)
+            try:
+                await relay.connect()
+                result = await relay.publish_event(event)
+                if not result["accepted"]:
+                    failed.append(f"{relay_url}: {result['message']}")
+            except Exception as e:
+                failed.append(f"{relay_url}: {e}")
+            finally:
+                await relay.close()
+
+        if failed:
+            typer.echo(f"Federation created but failed to publish to {len(failed)} relay(s):")
+            for f in failed:
+                typer.echo(f"  - {f}")
+        else:
+            typer.echo(f"Federation '{name}' created and published to {len(relay_urls)} relay(s).")
+
+        storage.upsert_federation(
+            federation_id=federation_id,
+            name=name,
+            relay_urls=relay_urls,
+            created_at=event["created_at"],
+        )
+
+        invite_code = f"federation:{federation_id}:{name}"
+        typer.echo(f"\nYour invite code: {invite_code}")
+        typer.echo("Share this code with others to join your federation.")
+
+    asyncio.run(_create())
     storage.close()
