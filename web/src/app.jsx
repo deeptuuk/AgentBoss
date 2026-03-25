@@ -12,7 +12,7 @@ export function App() {
   const [showPublish, setShowPublish] = useState(false);
   // Force re-render when language changes via subscribeToLang
   const [_langVersion, setLangVersion] = useState(0);
-  const { jobs, loading, error } = useJobs({ searchQuery });
+  const { jobs, loading, error, reload } = useJobs({ searchQuery });
   const { count: favCount } = useFavorites();
 
   // Subscribe to language changes — triggers re-render on switch
@@ -80,7 +80,7 @@ export function App() {
                   {loading ? t('loading_jobs') : `${jobs.length} ${t('jobs_count')}`}
                 </span>
               </div>
-              <JobList jobs={jobs} loading={loading} error={error} />
+              <JobList jobs={jobs} loading={loading} error={error} onJobClick={() => {}} onRetry={reload} onPublish={handlePublishClick} />
             </div>
 
             {/* Sidebar */}
