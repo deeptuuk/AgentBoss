@@ -39,7 +39,26 @@ agentboss publish --federation <名称> --province <省> --city <城市> --title
 
 ## 安装
 ```bash
+# 使用 uv 创建虚拟环境
+uv venv .env
+source .env/bin/activate  # Linux/Mac
+# .env\Scripts\activate   # Windows
+
+# 安装项目
 pip install -e .
+```
+
+## 运行环境
+使用 `uv` 管理虚拟环境确保一致性：
+```bash
+# 激活环境（每次操作前）
+source .env/bin/activate
+
+# 运行测试
+pytest tests/ -v
+
+# 运行 CLI
+agentboss <命令>
 ```
 
 ## 快速开始
