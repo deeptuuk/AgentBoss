@@ -33,7 +33,7 @@ export default defineConfig({
   base: process.env.VITE_BASE_PATH || '/',
   build: {
     outDir: isVercel ? 'dist' : resolve(__dirname, '../docs'),
-    emptyOutDir: true,
+    emptyOutDir: isVercel,
   },
   server: { port: 3000, open: true },
 });
